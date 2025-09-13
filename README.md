@@ -1,49 +1,54 @@
 ```
 sortir-jagung/
 │
-├── dataset/                         # Data untuk PCV & AI
-│   ├── grade_a/                     # Gambar jagung kualitas bagus (Grade A)
-│   ├── grade_b/                     # Gambar jagung kualitas sedang (Grade B)
-│   └── grade_c/                     # Gambar jagung kualitas rendah (Grade C)
+├── raw_data/                         # Dataset mentah (hasil foto HP)
+│   ├── grade_a/                      # Jagung kualitas bagus (Grade A)
+│   ├── grade_b/                      # Jagung kualitas sedang (Grade B)
+│   └── grade_c/                      # Jagung kualitas rendah (Grade C)
 │
-├── preprocessing/                   # Modul PCV
-│   ├── preprocess_images.py         # Resize, normalisasi, augmentasi
-│   └── segmentation.py              # Segmentasi buah jagung (OpenCV)
+├── dataset/                          # Dataset hasil preprocessing
+│   ├── grade_a/                      # Hasil preprocess jagung Grade A
+│   ├── grade_b/                      # Hasil preprocess jagung Grade B
+│   └── grade_c/                      # Hasil preprocess jagung Grade C
 │
-├── model/                           # Modul Sistem Kecerdasan (AI/DL)
-│   ├── train_model.ipynb            # Notebook training CNN/ResNet/MobileNet
-│   ├── evaluate_model.py            # Evaluasi akurasi, confusion matrix
-│   ├── model.h5                     # Model hasil training (TensorFlow/Keras)
-│   └── model.tflite                 # Versi ringan untuk IoT/edge device
+├── preprocessing/                    # Modul PCV
+│   ├── preprocess_images.py          # Script utama preprocessing (resize, normalisasi, augmentasi)
+│   └── segmentation.py               # Script segmentasi jagung dari background (OpenCV)
 │
-├── classification/                  # Modul inferensi (real-time klasifikasi)
-│   ├── classify_realtime.py         # Klasifikasi buah jagung via webcam
-│   └── test_single_image.py         # Tes klasifikasi untuk 1 gambar input
+├── model/                            # Modul Sistem Kecerdasan (AI/Deep Learning)
+│   ├── train_model.ipynb             # Notebook training CNN/ResNet/MobileNet
+│   ├── evaluate_model.py             # Script evaluasi (akurasi, confusion matrix, F1-score)
+│   ├── model.h5                      # Model hasil training format Keras/TensorFlow
+│   └── model.tflite                  # Model versi ringan untuk IoT (ESP32/Raspberry Pi)
 │
-├── iot/                             # Modul IoT
-│   ├── esp32_iot.ino                # ESP32 code (kirim data via WiFi/MQTT/Firebase)
-│   ├── mqtt_publisher.py            # Alternatif publish data dari Python → broker
-│   └── mqtt_subscriber.py           # Listener untuk dashboard lokal
+├── classification/                   # Modul inferensi (real-time klasifikasi)
+│   ├── classify_realtime.py          # Jalankan klasifikasi via webcam (real-time)
+│   └── test_single_image.py          # Uji klasifikasi untuk 1 gambar
 │
-├── dashboard/                       # Modul monitoring
-│   ├── web_dashboard/               # Web-based dashboard
-│   │   ├── index.html               # Tampilan utama dashboard
-│   │   ├── style.css                # Styling
-│   │   └── app.js                   # JS untuk ambil data dari Firebase/MQTT
-│   └── mobile_app/                  # (Opsional) App Android
-│       └── mit_app_inventor.aia     # File project MIT App Inventor
+├── iot/                              # Modul IoT
+│   ├── esp32_iot.ino                 # Kode ESP32 untuk kirim hasil klasifikasi ke cloud
+│   ├── mqtt_publisher.py             # Python: publish data ke MQTT broker/Firebase
+│   └── mqtt_subscriber.py            # Python: subscriber untuk monitoring data
 │
-├── actuator/                        # Modul sortir mekanik (opsional)
-│   └── servo_control.ino            # Kode servo motor untuk sortir fisik jagung
+├── dashboard/                        # Modul monitoring hasil sortir
+│   ├── web_dashboard/                # Dashboard berbasis web
+│   │   ├── index.html                # Tampilan utama dashboard
+│   │   ├── style.css                 # Styling web
+│   │   └── app.js                    # Script ambil data dari MQTT/Firebase
+│   └── mobile_app/                   # (Opsional) Aplikasi Android
+│       └── mit_app_inventor.aia      # File project MIT App Inventor
 │
-├── docs/                            # Dokumentasi & laporan
-│   ├── proposal.docx                # Proposal tugas akhir semester
-│   ├── laporan.docx                 # Laporan akhir
-│   ├── flowchart.png                # Diagram alur sistem
-│   └── architecture.png             # Arsitektur PCV + AI + IoT
+├── actuator/                         # Modul sortir fisik (opsional)
+│   └── servo_control.ino             # Kode servo/motor untuk sortir buah jagung
 │
-├── requirements.txt                 # Daftar library Python (OpenCV, TensorFlow, MQTT, dll.)
-└── README.md                        # Penjelasan singkat project
+├── docs/                             # Dokumentasi dan laporan
+│   ├── proposal.docx                 # Proposal tugas akhir
+│   ├── laporan.docx                  # Laporan akhir
+│   ├── flowchart.png                 # Diagram alur sistem
+│   └── architecture.png              # Arsitektur gabungan PCV + AI + IoT
+│
+├── requirements.txt                  # Daftar library Python (OpenCV, TensorFlow, MQTT, dll.)
+└── README.md                         # Dokumentasi utama project
 ```
 1. PCV (Pengolahan Citra & Vision)
 ```
