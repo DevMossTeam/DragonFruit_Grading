@@ -7,7 +7,6 @@ sortir-jagung/
 │   └── grade_c/                     # Gambar jagung kualitas rendah (Grade C)
 │
 ├── preprocessing/                   # Modul PCV
-│   ├── capture_dataset.py           # Script ambil gambar dari kamera
 │   ├── preprocess_images.py         # Resize, normalisasi, augmentasi
 │   └── segmentation.py              # Segmentasi buah jagung (OpenCV)
 │
