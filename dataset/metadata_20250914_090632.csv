@@ -1,6 +1,0 @@
-src,dst,status,timestamp,orig_w,orig_h,coverage,used_strategy,final_w,final_h,class
-raw_data\grade_a\image.png,dataset\grade_a\image.png,ok,20250914_090632,645,427,0.9892967282676746,minarea_attempt_0,224,224,grade_a
-raw_data\grade_b\asfasf.png,dataset\grade_b\asfasf.png,ok,20250914_090632,633,418,0.975074094880189,minarea_attempt_0,224,224,grade_b
-raw_data\grade_b\image.png,dataset\grade_b\image.png,ok,20250914_090632,635,422,0.9824035478406518,minarea_attempt_0,224,224,grade_b
-raw_data\grade_c\eryery.png,dataset\grade_c\eryery.png,ok,20250914_090632,643,427,0.8974919992162498,minarea_attempt_0,224,224,grade_c
-raw_data\grade_c\image.png,dataset\grade_c\image.png,ok,20250914_090632,622,469,0.9744332795375922,minarea_attempt_0,224,224,grade_c
