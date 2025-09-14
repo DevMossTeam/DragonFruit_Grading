@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
 """
-preprocess_images.py — Enhanced adaptive tight-crop pipeline (fixed)
+preprocess_images.py — Unified preprocessing + segmentation pipeline for Sortir Buah Jagung
 
-Perbaikan utama:
-- Hindari shadowing nama fungsi dengan variabel lokal (mis. mask_otsu -> mask_otsu_img)
-- Konsistensi penamaan variabel mask
-- Menjaga seluruh fitur sebelumnya (autotune, review, debug, intermediates)
+Features (merged & polished):
+- Adaptive tight-crop preprocessing for whole-fruit corn images (Grade A/B/C)
+- Multi-method segmentation (HSV adaptive, Otsu, edges, GrabCut, Watershed, KMeans)
+- Iterative attempts and validation by mask coverage threshold
+- Autotune margin estimation using sample images
+- Optional interactive review for low-confidence crops (OpenCV GUI)
+- Save intermediates for debugging: balanced image, masks, crops, overlays
+- EXIF-aware image load, unicode-safe read/write (Windows compatible)
+- Deterministic behavior with seed control
+- CLI with many options; self-test synthetic dataset included
 
-Author: Assistant (fixed)
+Usage examples:
+    python preprocessing/preprocess_images.py
+    python preprocessing/preprocess_images.py --verbose --save_intermediates
+    python preprocessing/preprocess_images.py --autotune 50 --verbose
+    python preprocessing/preprocess_images.py --mode segmentation --save_intermediates --verbose
+    python preprocessing/preprocess_images.py --self_test
+
+Dependencies:
+    pip install opencv-python-headless numpy pandas Pillow scikit-learn tqdm
+
+Author: Assistant (merged & fixed)
 Date: 2025-09
 """
 
@@ -21,15 +37,15 @@ import argparse
 import logging
 import shutil
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Tuple, Optional, Dict, Any, List
-from dataclasses import dataclass, asdict
 
 import numpy as np
 import pandas as pd
 import cv2
 from PIL import Image, ImageOps
 
-# Optional libs
+# Optional libraries
 try:
     from sklearn.cluster import KMeans
     HAS_SKLEARN = True
@@ -42,7 +58,7 @@ except Exception:
     tqdm = None
 
 # ----------------------------
-# Logging setup
+# Logging & IO helpers
 # ----------------------------
 def setup_logging(verbose: bool = False):
     level = logging.DEBUG if verbose else logging.INFO
@@ -53,23 +69,70 @@ def setup_logging(verbose: bool = False):
         force=True
     )
 
-# ----------------------------
-# Utility helpers
-# ----------------------------
 def ensure_dir(path: str):
-    """Create directory if it does not exist."""
     Path(path).mkdir(parents=True, exist_ok=True)
 
+def imread_unicode(path: str) -> Optional[np.ndarray]:
+    """Unicode-safe read that works on Windows paths containing non-ascii characters."""
+    try:
+        arr = np.fromfile(path, dtype=np.uint8)
+        if arr.size == 0:
+            return None
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return None
+        return img
+    except Exception as e:
+        logging.debug("imread_unicode failed for %s: %s", path, e)
+        return None
+
+def imwrite_unicode(path: str, img: np.ndarray, quality: int = 95) -> bool:
+    """Unicode-safe write using cv2.imencode then .tofile (handles Windows unicode paths)."""
+    try:
+        p = Path(path)
+        ensure_dir(str(p.parent))
+        ext = p.suffix.lower()
+        if ext == "":
+            path = str(p) + ".jpg"
+            ext = ".jpg"
+        if ext in (".jpg", ".jpeg"):
+            ok, enc = cv2.imencode(ext, img, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+        else:
+            ok, enc = cv2.imencode(ext, img)
+        if not ok:
+            logging.error("cv2.imencode failed for %s", path)
+            return False
+        enc.tofile(path)
+        return True
+    except Exception as e:
+        logging.exception("imwrite_unicode failed for %s: %s", path, e)
+        return False
+
+def load_image_exif(path: str, use_exif: bool = True) -> Optional[np.ndarray]:
+    """Load image respecting EXIF orientation, fallback to imread_unicode."""
+    try:
+        if use_exif:
+            im = Image.open(path)
+            im = ImageOps.exif_transpose(im)
+            im = im.convert("RGB")
+            arr = np.asarray(im)
+            bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            return bgr
+        else:
+            return imread_unicode(path)
+    except Exception:
+        return imread_unicode(path)
+
 # ----------------------------
-# Config dataclass
+# Configuration dataclasses
 # ----------------------------
 @dataclass
-class CFG:
+class PreprocessConfig:
     raw_dir: str = "raw_data"
     out_dir: str = "dataset"
     target_size: Tuple[int, int] = (224, 224)  # (H, W)
-    margin: float = 0.06                        # base margin fraction (6%)
-    min_contour_area_fraction: float = 0.0008   # fraction of image area -> min contour area
+    margin: float = 0.06
+    min_contour_area_fraction: float = 0.0008
     use_exif: bool = True
     use_clahe: bool = True
     clahe_clip: float = 2.0
@@ -87,64 +150,17 @@ class CFG:
     kmeans_clusters: int = 3
     hsv_ranges: Optional[List[Tuple[Tuple[int,int,int], Tuple[int,int,int]]]] = None
     timestamp_format: str = "%Y%m%d_%H%M%S"
-    # thresholds
-    crop_mask_coverage_threshold: float = 0.12  # fraction of pixels inside crop that must be mask>0
-    margin_increment_steps: List[float] = (0.06, 0.10, 0.18)  # try increasing margin when validation fails
+    crop_mask_coverage_threshold: float = 0.12
+    margin_increment_steps: Tuple[float, ...] = (0.06, 0.10, 0.18)
     max_attempts: int = 4
+    seed: int = 42
+    mode: str = "preprocess"  # options: preprocess, segmentation
+    verbose_intermediate: bool = False
 
 # ----------------------------
-# Utility IO helpers (unicode-safe)
+# Color & Image Enhancements
 # ----------------------------
-def imread_unicode(path: str) -> Optional[np.ndarray]:
-    try:
-        arr = np.fromfile(path, dtype=np.uint8)
-        if arr.size == 0:
-            return None
-        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        if img is None:
-            return None
-        return img
-    except Exception as e:
-        logging.debug("imread_unicode failed for %s: %s", path, e)
-        return None
-
-def imwrite_unicode(path: str, img: np.ndarray, quality: int = 95) -> bool:
-    try:
-        ext = Path(path).suffix.lower()
-        if ext == "":
-            path = str(path) + ".jpg"
-            ext = ".jpg"
-        if ext in (".jpg", ".jpeg"):
-            ok, enc = cv2.imencode(ext, img, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
-        else:
-            ok, enc = cv2.imencode(ext, img)
-        if not ok:
-            logging.error("imencode failed for %s", path)
-            return False
-        enc.tofile(path)
-        return True
-    except Exception as e:
-        logging.exception("imwrite_unicode failed for %s: %s", path, e)
-        return False
-
-def load_image_exif(path: str, use_exif: bool = True) -> Optional[np.ndarray]:
-    try:
-        if use_exif:
-            im = Image.open(path)
-            im = ImageOps.exif_transpose(im)
-            im = im.convert("RGB")
-            arr = np.asarray(im)
-            bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-            return bgr
-        else:
-            return imread_unicode(path)
-    except Exception:
-        return imread_unicode(path)
-
-# ----------------------------
-# Color operations
-# ----------------------------
-def grey_world(bgr: np.ndarray) -> np.ndarray:
+def grey_world_balance(bgr: np.ndarray) -> np.ndarray:
     img = bgr.astype(np.float32)
     means = img.mean(axis=(0,1))
     global_mean = means.mean()
@@ -152,44 +168,21 @@ def grey_world(bgr: np.ndarray) -> np.ndarray:
     balanced = img * scales
     return np.clip(balanced, 0, 255).astype(np.uint8)
 
-def apply_clahe(bgr: np.ndarray, clip: float, grid: Tuple[int,int]) -> np.ndarray:
+def apply_clahe_bgr(bgr: np.ndarray, clip=2.0, grid=(8,8)) -> np.ndarray:
     try:
         lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
+        l,a,b = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=grid)
         l2 = clahe.apply(l)
-        lab2 = cv2.merge([l2, a, b])
+        lab2 = cv2.merge([l2,a,b])
         return cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
     except Exception:
         return bgr
 
 # ----------------------------
-# Mask helpers
+# Mask primitives (robust set)
 # ----------------------------
-def mask_otsu_fn(bgr: np.ndarray) -> np.ndarray:
-    # renamed function internally to avoid any chance of name conflict in local scopes
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
-    _, m = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    if np.count_nonzero(m) < m.size/2:
-        m = cv2.bitwise_not(m)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel, iterations=2)
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel, iterations=1)
-    return m
-
-# Keep original function name for compatibility with earlier uses:
-mask_otsu = mask_otsu_fn
-
-def mask_edges(bgr: np.ndarray) -> np.ndarray:
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 60, 160)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
-    m = cv2.dilate(edges, kernel, iterations=2)
-    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel, iterations=2)
-    return m
-
-def mask_hsv_with_ranges(bgr: np.ndarray, ranges: List[Tuple[Tuple[int,int,int], Tuple[int,int,int]]]) -> np.ndarray:
+def mask_by_hsv_ranges(bgr: np.ndarray, ranges: List[Tuple[Tuple[int,int,int], Tuple[int,int,int]]]) -> np.ndarray:
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     combined = np.zeros(hsv.shape[:2], dtype=np.uint8)
     for low, high in ranges:
@@ -202,55 +195,93 @@ def mask_hsv_with_ranges(bgr: np.ndarray, ranges: List[Tuple[Tuple[int,int,int],
     combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel, iterations=1)
     return combined
 
-def default_hsv_ranges() -> List[Tuple[Tuple[int,int,int], Tuple[int,int,int]]]:
-    return [
-        ((15, 60, 60), (45, 255, 255)),  # yellow kernels
-        ((30, 30, 20), (90, 255, 255)),  # green husk
-    ]
+def mask_by_hsv_adaptive(bgr: np.ndarray) -> np.ndarray:
+    # adapt HSV ranges per-image by analyzing hue histogram peaks
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    h = hsv[:,:,0]
+    hist = cv2.calcHist([h],[0],None,[180],[0,180]).flatten()
+    hist_smooth = cv2.GaussianBlur(hist.reshape(-1,1),(5,1),0).flatten()
+    peaks_idx = np.argsort(hist_smooth)[-6:][::-1]
+    # prefer yellow-ish peaks (approx 10-60)
+    candidate = None
+    for p in peaks_idx:
+        if 8 <= p <= 60:
+            candidate = p
+            break
+    if candidate is None:
+        candidate = int(peaks_idx[0])
+    peak = int(candidate)
+    width = 14 if 10 < peak < 140 else 20
+    low = max(0, peak - width)
+    high = min(179, peak + width)
+    mask1 = cv2.inRange(hsv, np.array((low,40,30),dtype=np.uint8), np.array((high,255,255),dtype=np.uint8))
+    mask2 = cv2.inRange(hsv, np.array((30,30,20),dtype=np.uint8), np.array((90,255,255),dtype=np.uint8))
+    mask = cv2.bitwise_or(mask1, mask2)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    return mask
 
-# ----------------------------
-# Contour helpers & rotated crop
-# ----------------------------
-def largest_contour_minarea_rect(mask: np.ndarray, min_area: int):
-    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not cnts:
-        return None
-    areas = [cv2.contourArea(c) for c in cnts]
-    idx = int(np.argmax(areas))
-    if areas[idx] < min_area:
-        return None
-    cnt = cnts[idx]
-    rect = cv2.minAreaRect(cnt)
-    box = cv2.boxPoints(rect).astype(int)
-    return box, cnt, areas[idx]
+def mask_by_otsu(bgr: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray,(5,5),0)
+    _, m = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if np.count_nonzero(m) < m.size/2:
+        m = cv2.bitwise_not(m)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel, iterations=2)
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel, iterations=1)
+    return m
 
-def rotate_crop_by_box(bgr: np.ndarray, box: np.ndarray, margin_frac: float) -> np.ndarray:
-    rect = cv2.minAreaRect(box)
-    (cx,cy),(w,h),angle = rect
-    M = cv2.getRotationMatrix2D((cx,cy), angle, 1.0)
-    H, W = bgr.shape[:2]
-    rotated = cv2.warpAffine(bgr, M, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-    ones = np.ones((box.shape[0],1))
-    pts = np.hstack([box.astype(np.float32), ones])
-    rot_pts = (M @ pts.T).T
-    x_min, y_min = rot_pts.min(axis=0)
-    x_max, y_max = rot_pts.max(axis=0)
-    max_side = max(x_max - x_min, y_max - y_min)
-    pad = int(round(max_side * margin_frac))
-    x0 = int(max(0, math.floor(x_min - pad)))
-    y0 = int(max(0, math.floor(y_min - pad)))
-    x1 = int(min(W, math.ceil(x_max + pad)))
-    y1 = int(min(H, math.ceil(y_max + pad)))
-    crop = rotated[y0:y1, x0:x1]
-    return crop
+def mask_by_edges(bgr: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 60, 160)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
+    m = cv2.dilate(edges, kernel, iterations=2)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel, iterations=2)
+    return m
 
-# ----------------------------
-# KMeans HSV fallback (optional)
-# ----------------------------
-def hsv_kmeans_mask(bgr: np.ndarray, downscale: int = 4, n_clusters: int = 3) -> Optional[np.ndarray]:
+def mask_by_grabcut(bgr: np.ndarray, iter_count: int = 5) -> np.ndarray:
+    h,w = bgr.shape[:2]
+    mask = np.zeros((h,w), np.uint8)
+    rect = (int(w*0.05), int(h*0.05), max(2,int(w*0.9)), max(2,int(h*0.9)))
+    bgd = np.zeros((1,65), np.float64)
+    fgd = np.zeros((1,65), np.float64)
+    try:
+        cv2.grabCut(bgr, mask, rect, bgd, fgd, iter_count, cv2.GC_INIT_WITH_RECT)
+        mask2 = np.where((mask==2)|(mask==0), 0, 1).astype('uint8')*255
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+        mask2 = cv2.morphologyEx(mask2, cv2.MORPH_CLOSE, kernel, iterations=2)
+        mask2 = cv2.morphologyEx(mask2, cv2.MORPH_OPEN, kernel, iterations=1)
+        return mask2
+    except Exception as e:
+        logging.debug("grabcut failed: %s", e)
+        return np.zeros((h,w), dtype=np.uint8)
+
+def mask_by_watershed(bgr: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5,5), 0)
+    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    kernel = np.ones((3,3), np.uint8)
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+    sure_bg = cv2.dilate(opening, kernel, iterations=3)
+    dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
+    ret, sure_fg = cv2.threshold(dist_transform, 0.4*dist_transform.max(), 255, 0)
+    sure_fg = np.uint8(sure_fg)
+    unknown = cv2.subtract(sure_bg, sure_fg)
+    ret, markers = cv2.connectedComponents(sure_fg)
+    markers = markers + 1
+    markers[unknown==255] = 0
+    markers = cv2.watershed(bgr, markers.astype(np.int32))
+    mask = np.where(markers > 1, 255, 0).astype(np.uint8)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    return mask
+
+def mask_hsv_kmeans(bgr: np.ndarray, downscale: int=4, n_clusters: int=3) -> Optional[np.ndarray]:
     if not HAS_SKLEARN:
         return None
-    H0, W0 = bgr.shape[:2]
+    H0,W0 = bgr.shape[:2]
     if min(H0,W0) < 32:
         return None
     small = cv2.resize(bgr, (max(32, W0//downscale), max(32, H0//downscale)), interpolation=cv2.INTER_AREA)
@@ -259,44 +290,61 @@ def hsv_kmeans_mask(bgr: np.ndarray, downscale: int = 4, n_clusters: int = 3) ->
     s = hsv[:,:,1].reshape(-1,1)
     v = hsv[:,:,2].reshape(-1,1)
     X = np.concatenate([h,s,v], axis=1).astype(np.float32)
-    k = min(n_clusters, max(2, int(len(X) / 1000)))
     try:
+        k = min(n_clusters, max(2, int(len(X) / 1000)))
         km = KMeans(n_clusters=k, random_state=0, n_init="auto").fit(X)
         labels = km.labels_
         centers = km.cluster_centers_
         scores = centers[:,1] * centers[:,2]
         idx = int(np.argmax(scores))
         mask_small = (labels.reshape(hsv.shape[:2]) == idx).astype(np.uint8) * 255
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
         mask_small = cv2.morphologyEx(mask_small, cv2.MORPH_CLOSE, kernel, iterations=2)
         mask_small = cv2.morphologyEx(mask_small, cv2.MORPH_OPEN, kernel, iterations=1)
         mask = cv2.resize(mask_small, (W0, H0), interpolation=cv2.INTER_NEAREST)
         return mask
     except Exception as e:
-        logging.debug("hsv_kmeans_mask failure: %s", e)
+        logging.debug("hsv_kmeans failed: %s", e)
         return None
 
 # ----------------------------
-# Resize fill & crop to fixed size (no padding)
+# Mask postprocessing & utilities
 # ----------------------------
-def resize_fill(img: np.ndarray, th: int, tw: int) -> np.ndarray:
-    H, W = img.shape[:2]
-    if H == 0 or W == 0:
-        return np.zeros((th, tw, 3), dtype=np.uint8)
-    scale = max(tw / W, th / H)
-    new_w = int(round(W * scale))
-    new_h = int(round(H * scale))
-    interp = cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA
-    resized = cv2.resize(img, (new_w, new_h), interpolation=interp)
-    left = max(0, (new_w - tw) // 2)
-    top = max(0, (new_h - th) // 2)
-    cropped = resized[top: top + th, left: left + tw]
-    return cropped
+def mask_postprocess(mask: np.ndarray, min_area: int = 500, make_convex: bool = False) -> np.ndarray:
+    if mask is None:
+        return None
+    m = (mask>0).astype(np.uint8)*255
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel, iterations=2)
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel, iterations=1)
+    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    out = np.zeros_like(m)
+    for c in cnts:
+        a = int(cv2.contourArea(c))
+        if a >= min_area:
+            if make_convex:
+                hull = cv2.convexHull(c)
+                cv2.drawContours(out, [hull], -1, 255, -1)
+            else:
+                cv2.drawContours(out, [c], -1, 255, -1)
+    out = cv2.morphologyEx(out, cv2.MORPH_CLOSE, kernel, iterations=1)
+    return out
 
-# ----------------------------
-# Validation helpers
-# ----------------------------
-def compute_mask_coverage(mask: np.ndarray, crop_shape: Tuple[int,int]) -> float:
+def largest_component_mask(mask: np.ndarray, min_area: int = 100) -> Optional[np.ndarray]:
+    if mask is None:
+        return None
+    cnts, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return None
+    areas = [cv2.contourArea(c) for c in cnts]
+    idx = int(np.argmax(areas))
+    if areas[idx] < min_area:
+        return None
+    out = np.zeros_like(mask)
+    cv2.drawContours(out, [cnts[idx]], -1, 255, -1)
+    return out
+
+def compute_mask_coverage(mask: np.ndarray, crop_shape: Tuple[int, int]) -> float:
     if mask is None:
         return 0.0
     h, w = crop_shape[:2]
@@ -307,9 +355,160 @@ def compute_mask_coverage(mask: np.ndarray, crop_shape: Tuple[int,int]) -> float
     return foreground / float(total) if total > 0 else 0.0
 
 # ----------------------------
-# Single-image full pipeline (improved)
+# Rotation-aware crop helpers
 # ----------------------------
-def process_single_image(src: str, dst: str, cfg: CFG, intermediates_root: Optional[str] = None, tuned_params: Optional[Dict[str,Any]]=None) -> Optional[Dict[str,Any]]:
+def rotate_crop_by_box(bgr: np.ndarray, box: np.ndarray, margin_frac: float) -> np.ndarray:
+    pts = np.asarray(box, dtype=np.float32)
+    if pts.size == 0:
+        return np.zeros((0,0,3), dtype=np.uint8)
+    rect = cv2.minAreaRect(pts)
+    (cx,cy),(w,h),angle = rect
+    if w <= 0 or h <= 0:
+        return np.zeros((0,0,3), dtype=np.uint8)
+    M = cv2.getRotationMatrix2D((cx,cy), angle, 1.0)
+    H, W = bgr.shape[:2]
+    rotated = cv2.warpAffine(bgr, M, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    ones = np.ones((pts.shape[0],1), dtype=np.float32)
+    pts_h = np.hstack([pts, ones])
+    rot_pts = (M @ pts_h.T).T
+    x_min = float(rot_pts[:,0].min()); y_min = float(rot_pts[:,1].min())
+    x_max = float(rot_pts[:,0].max()); y_max = float(rot_pts[:,1].max())
+    max_side = max(x_max - x_min, y_max - y_min, 1.0)
+    pad = int(round(max_side * float(margin_frac)))
+    x0 = int(max(0, math.floor(x_min - pad))); y0 = int(max(0, math.floor(y_min - pad)))
+    x1 = int(min(W, math.ceil(x_max + pad))); y1 = int(min(H, math.ceil(y_max + pad)))
+    if x1 <= x0 or y1 <= y0:
+        return np.zeros((0,0,3), dtype=np.uint8)
+    crop = rotated[y0:y1, x0:x1]
+    return crop
+
+def rotated_crop_from_mask(bgr: np.ndarray, mask: np.ndarray, margin_frac: float = 0.06) -> Optional[np.ndarray]:
+    if mask is None:
+        return None
+    cnts, _ = cv2.findContours((mask>0).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return None
+    areas = [cv2.contourArea(c) for c in cnts]
+    idx = int(np.argmax(areas))
+    if areas[idx] < 50:
+        return None
+    rect = cv2.minAreaRect(cnts[idx])
+    box = cv2.boxPoints(rect).astype(int)
+    crop = rotate_crop_by_box(bgr, box, margin_frac)
+    return crop
+
+def resize_fill(img: np.ndarray, th: int, tw: int) -> np.ndarray:
+    H, W = img.shape[:2]
+    if H == 0 or W == 0:
+        return np.zeros((th, tw, 3), dtype=np.uint8)
+    scale = max(tw / W, th / H)
+    new_w = int(round(W * scale)); new_h = int(round(H * scale))
+    interp = cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA
+    resized = cv2.resize(img, (new_w, new_h), interpolation=interp)
+    left = max(0, (new_w - tw) // 2); top = max(0, (new_h - th) // 2)
+    cropped = resized[top: top + th, left: left + tw]
+    return cropped
+
+# ----------------------------
+# High-level combined segmentation (fusion logic)
+# ----------------------------
+def default_hsv_ranges() -> List[Tuple[Tuple[int,int,int], Tuple[int,int,int]]]:
+    return [
+        ((15, 60, 60), (45, 255, 255)),  # yellow kernels
+        ((30, 30, 20), (90, 255, 255)),  # green husk
+    ]
+
+def combined_segmentation(bgr: np.ndarray, cfg: PreprocessConfig, debug_prefix: Optional[str] = None) -> Dict[str,Any]:
+    """
+    Returns dict containing masks and meta:
+    - img_bal, mask_hsv, mask_otsu, mask_edge, mask_grab, mask_watershed, mask_kmeans, fused_candidate, cleaned, largest, meta
+    """
+    meta = {}
+    img = bgr.copy()
+    H,W = img.shape[:2]
+    img_bal = grey_world_balance(img)
+    if cfg.use_clahe:
+        img_bal = apply_clahe_bgr(img_bal, cfg.clahe_clip, cfg.clahe_grid)
+    hsv_ranges = cfg.hsv_ranges if cfg.hsv_ranges is not None else default_hsv_ranges()
+
+    mask_hsv = mask_by_hsv_adaptive(img_bal)
+    mask_otsu_img = mask_by_otsu(img_bal)
+    mask_edge_img = mask_by_edges(img_bal)
+    mask_grab = mask_by_grabcut(img_bal)
+    mask_watershed = mask_by_watershed(img_bal)
+    mask_kmeans = None
+    if HAS_SKLEARN:
+        mask_kmeans = mask_hsv_kmeans(img_bal, downscale=cfg.sample_downscale, n_clusters=cfg.kmeans_clusters)
+
+    if cfg.save_intermediates and debug_prefix:
+        inter_dir = Path(debug_prefix).parent
+        ensure_dir(str(inter_dir))
+        imwrite_unicode(str(inter_dir / (Path(debug_prefix).stem + "_balanced.jpg")), img_bal)
+        imwrite_unicode(str(inter_dir / (Path(debug_prefix).stem + "_hsv_mask.png")), mask_hsv)
+        imwrite_unicode(str(inter_dir / (Path(debug_prefix).stem + "_otsu_mask.png")), mask_otsu_img)
+        imwrite_unicode(str(inter_dir / (Path(debug_prefix).stem + "_edge_mask.png")), mask_edge_img)
+        imwrite_unicode(str(inter_dir / (Path(debug_prefix).stem + "_grab_mask.png")), mask_grab)
+        imwrite_unicode(str(inter_dir / (Path(debug_prefix).stem + "_wat_mask.png")), mask_watershed)
+        if mask_kmeans is not None:
+            imwrite_unicode(str(inter_dir / (Path(debug_prefix).stem + "_kmeans_mask.png")), mask_kmeans)
+
+    fuse_base = cv2.bitwise_or(mask_hsv, mask_otsu_img)
+    fuse_refine = cv2.bitwise_or(mask_grab, mask_watershed)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(9,9))
+    refined = cv2.bitwise_and(fuse_base, cv2.dilate(fuse_refine, kernel, iterations=1))
+    if mask_kmeans is not None:
+        refined = cv2.bitwise_or(refined, mask_kmeans)
+    candidate = cv2.bitwise_or(refined, fuse_base)
+    min_area = max(150, int(cfg.min_contour_area_fraction * float(H*W)))
+    cleaned = mask_postprocess(candidate, min_area, make_convex=False)
+    largest = largest_component_mask(cleaned, min_area=min_area)
+    if largest is None:
+        # fallback: smaller threshold
+        cleaned2 = mask_postprocess(fuse_base, min_area=max(50, min_area//4), make_convex=False)
+        largest = largest_component_mask(cleaned2, min_area=max(50, min_area//4))
+        if largest is None:
+            largest = None
+            coverage = 0.0
+        else:
+            coverage = float((largest>0).sum()) / float(H*W)
+    else:
+        coverage = float((largest>0).sum()) / float(H*W)
+
+    meta.update({'coverage': coverage, 'min_area': min_area, 'has_kmeans': mask_kmeans is not None})
+    return {
+        'img_bal': img_bal,
+        'mask_hsv': mask_hsv,
+        'mask_otsu': mask_otsu_img,
+        'mask_edge': mask_edge_img,
+        'mask_grabcut': mask_grab,
+        'mask_watershed': mask_watershed,
+        'mask_kmeans': mask_kmeans,
+        'fused_candidate': candidate,
+        'cleaned': cleaned,
+        'largest': largest,
+        'meta': meta
+    }
+
+def draw_overlay(bgr: np.ndarray, mask: np.ndarray, alpha: float = 0.45) -> np.ndarray:
+    vis = bgr.copy()
+    color = (0,255,0)
+    colored = np.zeros_like(bgr)
+    if mask is not None and mask.shape[:2] == bgr.shape[:2]:
+        colored[mask>0] = color
+    overlay = cv2.addWeighted(vis, 1.0, colored, alpha, 0)
+    if mask is not None:
+        cnts, _ = cv2.findContours((mask>0).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(overlay, cnts, -1, (0,200,255), 2)
+    return overlay
+
+# ----------------------------
+# Single-image preprocessing pipeline
+# ----------------------------
+def process_single_image(src: str, dst: str, cfg: PreprocessConfig, intermediates_root: Optional[str] = None, tuned_params: Optional[Dict[str,Any]] = None) -> Optional[Dict[str,Any]]:
+    """
+    Read -> color-correct -> segmentation attempts -> rotated crop -> validate coverage -> resize -> save.
+    Returns metadata dict (status, coverage, used_strategy, etc.)
+    """
     meta = {"src": src, "dst": dst, "status": "unknown", "timestamp": time.strftime(cfg.timestamp_format)}
     try:
         img = load_image_exif(src, use_exif=cfg.use_exif)
@@ -327,19 +526,20 @@ def process_single_image(src: str, dst: str, cfg: CFG, intermediates_root: Optio
         if hsv_ranges is None:
             hsv_ranges = default_hsv_ranges()
 
-        img_bal = grey_world(img)
+        # color balance + CLAHE
+        img_bal = grey_world_balance(img)
         if cfg.use_clahe:
-            img_bal = apply_clahe(img_bal, cfg.clahe_clip, cfg.clahe_grid)
+            img_bal = apply_clahe_bgr(img_bal, cfg.clahe_clip, cfg.clahe_grid)
 
         if cfg.save_intermediates and intermediates_root:
             inter_dir = Path(intermediates_root) / Path(src).parent.name
-            inter_dir.mkdir(parents=True, exist_ok=True)
+            ensure_dir(str(inter_dir))
             imwrite_unicode(str(inter_dir / (Path(src).stem + "_balanced.jpg")), img_bal, quality=95)
 
-        # BUILD MASKS (use unique variable names)
-        mask_hsv = mask_hsv_with_ranges(img_bal, hsv_ranges)
-        mask_otsu_img = mask_otsu(img_bal)  # variable name changed to avoid shadowing function
-        mask_edge_img = mask_edges(img_bal)
+        # Build combined mask
+        mask_hsv = mask_by_hsv_adaptive(img_bal)
+        mask_otsu_img = mask_by_otsu(img_bal)
+        mask_edge_img = mask_by_edges(img_bal)
         combined = cv2.bitwise_or(mask_hsv, cv2.bitwise_or(mask_otsu_img, mask_edge_img))
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
         combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel, iterations=2)
@@ -349,6 +549,7 @@ def process_single_image(src: str, dst: str, cfg: CFG, intermediates_root: Optio
             inter_dir = Path(intermediates_root) / Path(src).parent.name
             imwrite_unicode(str(inter_dir / (Path(src).stem + "_mask_combined.png")), combined, quality=100)
 
+        # Try multiple strategies
         attempt = 0
         used_strategy = None
         crop_img = None
@@ -394,7 +595,7 @@ def process_single_image(src: str, dst: str, cfg: CFG, intermediates_root: Optio
         # KMeans fallback
         if crop_img is None or meta.get('coverage', 0.0) < cfg.crop_mask_coverage_threshold:
             if HAS_SKLEARN:
-                km_mask = hsv_kmeans_mask(img_bal, downscale=cfg.sample_downscale, n_clusters=cfg.kmeans_clusters)
+                km_mask = mask_hsv_kmeans(img_bal, downscale=cfg.sample_downscale, n_clusters=cfg.kmeans_clusters)
                 if km_mask is not None:
                     if cfg.save_intermediates and intermediates_root:
                         inter_dir = Path(intermediates_root) / Path(src).parent.name
@@ -447,6 +648,7 @@ def process_single_image(src: str, dst: str, cfg: CFG, intermediates_root: Optio
             logging.error("Crop failed entirely for %s", src)
             return meta
 
+        # Resize to target and save
         th, tw = cfg.target_size
         out = resize_fill(crop_img, th, tw)
 
@@ -477,9 +679,21 @@ def process_single_image(src: str, dst: str, cfg: CFG, intermediates_root: Optio
         meta['exception'] = str(e)
         return meta
 
-# helper used above
+def largest_contour_minarea_rect(mask: np.ndarray, min_area: int):
+    cnts, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return None
+    areas = [cv2.contourArea(c) for c in cnts]
+    idx = int(np.argmax(areas))
+    if areas[idx] < min_area:
+        return None
+    cnt = cnts[idx]
+    rect = cv2.minAreaRect(cnt)
+    box = cv2.boxPoints(rect).astype(int)
+    return box, cnt, areas[idx]
+
 def largest_component_bbox_from_mask(mask: np.ndarray, min_area: int):
-    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
         return None
     areas = [cv2.contourArea(c) for c in cnts]
@@ -490,9 +704,20 @@ def largest_component_bbox_from_mask(mask: np.ndarray, min_area: int):
     return (x,y,w,h)
 
 # ----------------------------
-# Autotune: sample N images and find robust margin & optionally HSV tweak
+# Batch driver + autotune + review
 # ----------------------------
-def autotune_parameters(cfg: CFG, sample_n: int = 30, random_seed: int = 0) -> Dict[str,Any]:
+def collect_input_mapping(raw_dir: str) -> Dict[str, List[str]]:
+    p = Path(raw_dir)
+    if not p.exists():
+        return {}
+    classes = [x for x in sorted(p.iterdir()) if x.is_dir()]
+    mapping = {}
+    for c in classes:
+        files = [str(f) for f in sorted(c.rglob("*")) if f.suffix.lower() in (".jpg",".jpeg",".png",".bmp",".tiff")]
+        mapping[c.name] = files
+    return mapping
+
+def autotune_parameters(cfg: PreprocessConfig, sample_n: int = 30, random_seed: int = 0) -> Dict[str, Any]:
     np.random.seed(random_seed)
     mapping = collect_input_mapping(cfg.raw_dir)
     paths = []
@@ -502,28 +727,24 @@ def autotune_parameters(cfg: CFG, sample_n: int = 30, random_seed: int = 0) -> D
         raise FileNotFoundError("No files found for autotune")
     sample_n = min(sample_n, len(paths))
     samples = list(np.random.choice(paths, sample_n, replace=False))
-
     margins_to_try = [0.02, 0.04, 0.06, 0.08, 0.10, 0.14, 0.18]
     good_margins = []
-    logging.info("Autotune: sampling %d images to test margins %s", len(samples), margins_to_try)
+    logging.info("Autotune: sampling %d images", len(samples))
     for p in samples:
         img = load_image_exif(p, use_exif=cfg.use_exif)
         if img is None:
             continue
-        img_bal = grey_world(img)
+        img_bal = grey_world_balance(img)
         if cfg.use_clahe:
-            img_bal = apply_clahe(img_bal, cfg.clahe_clip, cfg.clahe_grid)
-        hsv_ranges = cfg.hsv_ranges if cfg.hsv_ranges is not None else default_hsv_ranges()
-        combined = mask_hsv_with_ranges(img_bal, hsv_ranges)
-        m2 = mask_otsu(img_bal)
-        me = mask_edges(img_bal)
+            img_bal = apply_clahe_bgr(img_bal, cfg.clahe_clip, cfg.clahe_grid)
+        combined = mask_by_hsv_adaptive(img_bal)
+        m2 = mask_by_otsu(img_bal)
+        me = mask_by_edges(img_bal)
         combined = cv2.bitwise_or(combined, cv2.bitwise_or(m2, me))
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
         combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel, iterations=2)
-
         area = float(img.shape[0] * img.shape[1])
         min_contour_area = max(int(area * cfg.min_contour_area_fraction), 100)
-
         found_good = False
         for m in margins_to_try:
             lamr = largest_contour_minarea_rect(combined, min_contour_area)
@@ -536,52 +757,35 @@ def autotune_parameters(cfg: CFG, sample_n: int = 30, random_seed: int = 0) -> D
                     good_margins.append(m)
                     found_good = True
                     break
-        if not found_good:
-            if HAS_SKLEARN:
-                kmask = hsv_kmeans_mask(img_bal, downscale=cfg.sample_downscale, n_clusters=cfg.kmeans_clusters)
-                if kmask is not None:
-                    lamr2 = largest_contour_minarea_rect(kmask, max(200, int(min_contour_area/2)))
-                    if lamr2:
-                        box2, cnt2, _ = lamr2
-                        m2 = cfg.margin
-                        crop_img = rotate_crop_by_box(img_bal, box2, m2)
-                        crop_mask = rotate_crop_by_box(kmask, box2, m2)
-                        cov2 = compute_mask_coverage((crop_mask>0).astype(np.uint8), crop_img.shape[:2])
-                        if cov2 >= cfg.crop_mask_coverage_threshold:
-                            good_margins.append(m2)
+        if not found_good and HAS_SKLEARN:
+            kmask = mask_hsv_kmeans(img_bal, downscale=cfg.sample_downscale, n_clusters=cfg.kmeans_clusters)
+            if kmask is not None:
+                lamr2 = largest_contour_minarea_rect(kmask, max(200, int(min_contour_area/2)))
+                if lamr2:
+                    box2, cnt2, _ = lamr2
+                    m2 = cfg.margin
+                    crop_img = rotate_crop_by_box(img_bal, box2, m2)
+                    crop_mask = rotate_crop_by_box(kmask, box2, m2)
+                    cov2 = compute_mask_coverage((crop_mask>0).astype(np.uint8), crop_img.shape[:2])
+                    if cov2 >= cfg.crop_mask_coverage_threshold:
+                        good_margins.append(m2)
     if not good_margins:
-        logging.warning("Autotune didn't find consistent margins; falling back to default margin %.3f", cfg.margin)
+        logging.warning("Autotune found nothing consistent; using default margin %.3f", cfg.margin)
         return {"margin": cfg.margin}
     chosen = float(np.median(np.array(good_margins)))
-    logging.info("Autotune chosen median margin=%.4f from %d samples", chosen, len(good_margins))
+    logging.info("Autotune chosen margin = %.4f (from %d good samples)", chosen, len(good_margins))
     return {"margin": chosen}
 
-def collect_input_mapping(raw_dir: str) -> Dict[str, List[str]]:
-    p = Path(raw_dir)
-    if not p.exists():
-        return {}
-    classes = [x for x in sorted(p.iterdir()) if x.is_dir()]
-    mapping = {}
-    for c in classes:
-        files = [str(f) for f in sorted(c.rglob("*")) if f.suffix.lower() in (".jpg",".jpeg",".png",".bmp",".tiff")]
-        mapping[c.name] = files
-    return mapping
-
-# ----------------------------
-# Batch driver including review mode
-# ----------------------------
-def run_pipeline(cfg: CFG, tuned: Optional[Dict[str,Any]]=None):
+def run_pipeline(cfg: PreprocessConfig, tuned: Optional[Dict[str,Any]] = None):
     mapping = collect_input_mapping(cfg.raw_dir)
     if not mapping:
         logging.error("No classes found in %s", cfg.raw_dir)
         return
-
     ensure_dir(cfg.out_dir)
     review_root = Path(cfg.review_save_path)
     if cfg.review_mode:
         ensure_dir(str(review_root))
         ensure_dir(str(review_root / cfg.reject_folder_name))
-
     intermediates_root = None
     if cfg.save_intermediates or cfg.debug:
         intermediates_root = str(Path(cfg.out_dir) / "_intermediates")
@@ -597,14 +801,43 @@ def run_pipeline(cfg: CFG, tuned: Optional[Dict[str,Any]]=None):
             items.append((f, dst, cls))
 
     total = len(items)
-    logging.info("Processing %d images across %d classes", total, len(mapping))
-
-    iterator = items if tqdm is None else tqdm(items, desc="Preprocessing", ncols=100)
-
+    logging.info("Processing %d images across %d classes (mode=%s)", total, len(mapping), cfg.mode)
+    iterator = items if tqdm is None else tqdm(items, desc="Processing", ncols=120)
     for src, dst, cls in iterator:
         if Path(dst).exists() and not cfg.force:
             results.append({"src": src, "dst": dst, "class": cls, "status": "skipped"})
             continue
+        if cfg.mode == "segmentation":
+            # segmentation-only mode: produce mask + overlay + crop optionally
+            try:
+                bgr = load_image_exif(src, use_exif=cfg.use_exif)
+                if bgr is None:
+                    logging.warning("Cannot read %s", src)
+                    results.append({'src': src, 'status': 'read_failed', 'class': cls})
+                    continue
+                debug_prefix = None
+                if intermediates_root:
+                    debug_prefix = str(Path(intermediates_root) / cls / Path(src).stem)
+                out = combined_segmentation(bgr, cfg, debug_prefix=debug_prefix)
+                mask = out.get('largest') or out.get('cleaned') or np.zeros((bgr.shape[0], bgr.shape[1]), dtype=np.uint8)
+                mask_path = str(Path(cfg.out_dir) / cls / (Path(src).stem + "_mask.png"))
+                overlay_path = str(Path(cfg.out_dir) / cls / (Path(src).stem + "_overlay.jpg"))
+                imwrite_unicode(mask_path, mask, quality=100)
+                imwrite_unicode(overlay_path, draw_overlay(bgr, mask), quality=95)
+                crop = rotated_crop_from_mask(bgr, mask, cfg.margin)
+                crop_dst = None
+                if crop is not None:
+                    th, tw = cfg.target_size
+                    crop = resize_fill(crop, th, tw)
+                    crop_dst = str(Path(cfg.out_dir) / cls / (Path(src).stem + f"_crop_{th}x{tw}.jpg"))
+                    imwrite_unicode(crop_dst, crop, quality=95)
+                results.append({'src': src, 'dst_mask': mask_path, 'dst_overlay': overlay_path, 'crop': crop_dst, 'coverage': out['meta']['coverage'], 'status':'ok', 'class':cls})
+            except Exception as e:
+                logging.exception("Segmentation failed for %s: %s", src, e)
+                results.append({'src': src, 'status':'error', 'exception': str(e), 'class': cls})
+            continue
+
+        # else preprocessing mode (crop -> save resized)
         meta = process_single_image(src, dst, cfg, intermediates_root, tuned_params=tuned)
         if meta is None:
             results.append({"src": src, "dst": dst, "class": cls, "status": "error"})
@@ -623,6 +856,8 @@ def run_pipeline(cfg: CFG, tuned: Optional[Dict[str,Any]]=None):
                     logging.info("Copied low-confidence result %s -> %s", dst, str(review_dst))
                 except Exception:
                     logging.exception("Failed to copy for review")
+
+    # Save metadata & summary
     ts = time.strftime(cfg.timestamp_format)
     meta_csv = Path(cfg.out_dir) / f"metadata_{ts}.csv"
     try:
@@ -642,9 +877,9 @@ def run_pipeline(cfg: CFG, tuned: Optional[Dict[str,Any]]=None):
         logging.exception("Failed to write metadata/summary")
 
 # ----------------------------
-# Interactive review (optional)
+# Interactive review (simple OpenCV)
 # ----------------------------
-def interactive_review(cfg: CFG):
+def interactive_review(cfg: PreprocessConfig):
     review_dir = Path(cfg.review_save_path) / cfg.reject_folder_name
     if not review_dir.exists():
         logging.error("No review rejects found at %s", str(review_dir))
@@ -663,7 +898,7 @@ def interactive_review(cfg: CFG):
             logging.warning("Cannot read preview %s", src)
             idx += 1
             continue
-        cv2.imshow("Preview (press y accept / n reject / q quit)", preview)
+        cv2.imshow("Review (y accept / n reject / q quit)", preview)
         k = cv2.waitKey(0) & 0xFF
         if k == ord('y'):
             logging.info("Accepted %s", src)
@@ -680,15 +915,71 @@ def interactive_review(cfg: CFG):
     cv2.destroyAllWindows()
 
 # ----------------------------
-# CLI
+# HSV tuner utility
 # ----------------------------
-def parse_cli() -> Tuple[CFG, argparse.Namespace]:
-    p = argparse.ArgumentParser(description="Adaptive tight-crop preprocessing for Sortir Buah Jagung")
+def hsv_tuner(image_path: str):
+    img = load_image_exif(image_path, use_exif=True)
+    if img is None:
+        print("Cannot read image", image_path); return
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    def nothing(x): pass
+    cv2.namedWindow('tuner', cv2.WINDOW_NORMAL)
+    cv2.createTrackbar('Hmin','tuner',10,179,nothing)
+    cv2.createTrackbar('Hmax','tuner',50,179,nothing)
+    cv2.createTrackbar('Smin','tuner',40,255,nothing)
+    cv2.createTrackbar('Vmin','tuner',30,255,nothing)
+    while True:
+        hmin = cv2.getTrackbarPos('Hmin','tuner')
+        hmax = cv2.getTrackbarPos('Hmax','tuner')
+        smin = cv2.getTrackbarPos('Smin','tuner')
+        vmin = cv2.getTrackbarPos('Vmin','tuner')
+        mask = cv2.inRange(hsv, np.array((hmin,smin,vmin),dtype=np.uint8), np.array((hmax,255,255),dtype=np.uint8))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7)))
+        overlay = draw_overlay(img, mask)
+        cv2.imshow('tuner', overlay)
+        k = cv2.waitKey(30) & 0xFF
+        if k == ord('q'):
+            break
+    cv2.destroyAllWindows()
+
+# ----------------------------
+# Self-test generators
+# ----------------------------
+def create_synthetic_dataset(base_dir: str = "tmp_raw", classes: int = 3, per_class: int = 6):
+    ensure_dir(base_dir)
+    rng = np.random.RandomState(0)
+    for ci in range(classes):
+        cdir = Path(base_dir) / f"grade_{ci}"
+        ensure_dir(str(cdir))
+        for i in range(per_class):
+            h = rng.randint(300,800); w = rng.randint(300,800)
+            img = np.ones((h,w,3), dtype=np.uint8)*255
+            color = (int(rng.randint(10,220)), int(rng.randint(80,250)), int(rng.randint(80,250)))
+            center = (w//2, h//2); axes = (w//4, h//6); angle = rng.randint(0,359)
+            cv2.ellipse(img, center, axes, angle, 0, 360, color, -1)
+            fname = str(cdir / f"image_{i}.jpg")
+            imwrite_unicode(fname, img, quality=95)
+    return base_dir
+
+def run_self_test():
+    tmp = create_synthetic_dataset()
+    cfg = PreprocessConfig(raw_dir=tmp, out_dir='tmp_dataset_out', debug=True, save_intermediates=True, verbose=True, force=True)
+    tuned = None
+    run_pipeline(cfg, tuned)
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree('tmp_dataset_out', ignore_errors=True)
+    print("Self-test done (temp folders removed)")
+
+# ----------------------------
+# CLI and main
+# ----------------------------
+def parse_cli():
+    p = argparse.ArgumentParser(description="Unified preprocessing & segmentation for Sortir Buah Jagung")
     p.add_argument("--raw_dir", type=str, default=None)
     p.add_argument("--out_dir", type=str, default=None)
     p.add_argument("--target_size", nargs=2, type=int, default=None, help="H W")
     p.add_argument("--margin", type=float, default=None)
-    p.add_argument("--min_area_frac", type=float, default=None, help="min contour area as fraction of image area")
+    p.add_argument("--min_area_frac", type=float, default=None)
     p.add_argument("--no_exif", action="store_true")
     p.add_argument("--no_clahe", action="store_true")
     p.add_argument("--debug", action="store_true")
@@ -696,66 +987,45 @@ def parse_cli() -> Tuple[CFG, argparse.Namespace]:
     p.add_argument("--force", action="store_true")
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--autotune", type=int, default=None, help="autotune with N samples")
-    p.add_argument("--review", action="store_true", help="enable review mode (copies low-confidence crops to dataset_review/rejects)")
-    p.add_argument("--self_test", action="store_true", help="run synthetic self-test")
-    return p.parse_args(), p
-
-def create_synthetic_dataset(base_dir: str = "tmp_synth", classes: int = 3, per_class: int = 6):
-    Path(base_dir).mkdir(parents=True, exist_ok=True)
-    rng = np.random.RandomState(0)
-    for ci in range(classes):
-        cls = f"grade_{ci}"
-        dirc = Path(base_dir) / cls
-        dirc.mkdir(parents=True, exist_ok=True)
-        for i in range(per_class):
-            h = rng.randint(240, 640); w = rng.randint(240, 640)
-            img = np.ones((h,w,3), dtype=np.uint8) * 255
-            color = (int(rng.randint(0,255)), int(rng.randint(0,255)), int(rng.randint(0,255)))
-            center = (w//2, h//2)
-            axes = (w//4, h//6)
-            angle = rng.randint(0,359)
-            cv2.ellipse(img, center, axes, angle, 0, 360, color, -1)
-            imwrite_unicode(str(dirc / f"{cls}_{i}.jpg"), img, quality=95)
-    return base_dir
-
-def run_self_test_quick():
-    tmp = create_synthetic_dataset()
-    out = "tmp_dataset_out"
-    cfg = CFG(raw_dir=tmp, out_dir=out, debug=True, save_intermediates=True, verbose=True, force=True)
-    run_pipeline(cfg)
-    ok = any(Path(out).rglob("*.jpg"))
-    shutil.rmtree(tmp, ignore_errors=True)
-    shutil.rmtree(out, ignore_errors=True)
-    return ok
+    p.add_argument("--review", action="store_true")
+    p.add_argument("--self_test", action="store_true")
+    p.add_argument("--tune", type=str, default=None, help="HSV tuner for single image")
+    p.add_argument("--mode", type=str, default="preprocess", choices=("preprocess","segmentation"), help="Operation mode")
+    return p.parse_args()
 
 def main():
-    args_ns, parser = parse_cli()
-    cfg = CFG()
-    if args_ns.raw_dir: cfg.raw_dir = args_ns.raw_dir
-    if args_ns.out_dir: cfg.out_dir = args_ns.out_dir
-    if args_ns.target_size:
-        cfg.target_size = (int(args_ns.target_size[0]), int(args_ns.target_size[1]))
-    if args_ns.margin is not None: cfg.margin = float(args_ns.margin)
-    if args_ns.min_area_frac is not None: cfg.min_contour_area_fraction = float(args_ns.min_area_frac)
-    if args_ns.no_exif: cfg.use_exif = False
-    if args_ns.no_clahe: cfg.use_clahe = False
-    if args_ns.debug: cfg.debug = True
-    if args_ns.save_intermediates: cfg.save_intermediates = True
-    if args_ns.force: cfg.force = True
-    if args_ns.verbose: cfg.verbose = True
-    if args_ns.autotune: cfg.autotune_samples = int(args_ns.autotune)
-    if args_ns.review: cfg.review_mode = True
+    args = parse_cli()
+    cfg = PreprocessConfig()
+    if args.raw_dir: cfg.raw_dir = args.raw_dir
+    if args.out_dir: cfg.out_dir = args.out_dir
+    if args.target_size: cfg.target_size = (int(args.target_size[0]), int(args.target_size[1]))
+    if args.margin is not None: cfg.margin = float(args.margin)
+    if args.min_area_frac is not None: cfg.min_contour_area_fraction = float(args.min_area_frac)
+    if args.no_exif: cfg.use_exif = False
+    if args.no_clahe: cfg.use_clahe = False
+    if args.debug: cfg.debug = True
+    if args.save_intermediates: cfg.save_intermediates = True
+    if args.force: cfg.force = True
+    if args.verbose: cfg.verbose = True
+    if args.autotune: cfg.autotune_samples = int(args.autotune)
+    if args.review: cfg.review_mode = True
+    if args.tune: pass
+    cfg.mode = args.mode
 
     setup_logging(cfg.verbose)
 
-    if args_ns.self_test:
-        ok = run_self_test_quick()
-        logging.info("Self-test quick: %s", ok)
-        sys.exit(0 if ok else 2)
+    if args.self_test:
+        run_self_test()
+        return
+
+    if args.tune:
+        hsv_tuner(args.tune)
+        return
 
     if not Path(cfg.raw_dir).exists():
         logging.error("raw_dir '%s' not found. Place images under raw_data/<class>", cfg.raw_dir)
         sys.exit(2)
+
     Path(cfg.out_dir).mkdir(parents=True, exist_ok=True)
 
     tuned = None
@@ -764,18 +1034,18 @@ def main():
             tuned = autotune_parameters(cfg, sample_n=cfg.autotune_samples)
             logging.info("Autotune result: %s", str(tuned))
         except Exception:
-            logging.exception("Autotune failed; proceeding with defaults")
+            logging.exception("Autotune failed; continuing with defaults")
 
     run_pipeline(cfg, tuned)
 
     if cfg.review_mode:
-        logging.info("Entering interactive review (if GUI available).")
+        logging.info("Starting interactive review (requires GUI).")
         try:
             interactive_review(cfg)
         except Exception:
-            logging.exception("Interactive review failed or not supported in this environment.")
+            logging.exception("Interactive review failed or not supported here.")
 
-    logging.info("All done.")
+    logging.info("Processing complete.")
 
 if __name__ == "__main__":
     main()
