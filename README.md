@@ -12,8 +12,7 @@ sortir-jagung/
 │   └── grade_c/                      # Hasil preprocess jagung Grade C
 │
 ├── preprocessing/                    # Modul PCV
-│   ├── preprocess_images.py          # Script utama preprocessing (resize, normalisasi, augmentasi)
-│   └── segmentation.py               # Script segmentasi jagung dari background (OpenCV)
+│   └── preprocess_images.py          # Script utama preprocessing (resize, normalisasi, augmentasi)
 │
 ├── model/                            # Modul Sistem Kecerdasan (AI/Deep Learning)
 │   ├── train_model.ipynb             # Notebook training CNN/ResNet/MobileNet
@@ -41,20 +40,12 @@ sortir-jagung/
 ├── actuator/                         # Modul sortir fisik (opsional)
 │   └── servo_control.ino             # Kode servo/motor untuk sortir buah jagung
 │
-├── docs/                             # Dokumentasi dan laporan
-│   ├── proposal.docx                 # Proposal tugas akhir
-│   ├── laporan.docx                  # Laporan akhir
-│   ├── flowchart.png                 # Diagram alur sistem
-│   └── architecture.png              # Arsitektur gabungan PCV + AI + IoT
-│
 ├── requirements.txt                  # Daftar library Python (OpenCV, TensorFlow, MQTT, dll.)
 └── README.md                         # Dokumentasi utama project
 ```
 1. PCV (Pengolahan Citra & Vision)
 ```
-preprocessing/capture_dataset.py
 preprocessing/preprocess_images.py
-preprocessing/segmentation.py
 Fokus: pengambilan gambar buah jagung, segmentasi citra, preprocessing.
 ```
 

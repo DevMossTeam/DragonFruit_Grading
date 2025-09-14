@@ -1,0 +1,10 @@
+# Core image processing
+opencv-python>=4.10.0.84
+numpy>=1.26.4
+pillow>=10.4.0
+
+# Metadata & data export
+pandas>=2.2.2
+
+# CLI / utils
+argparse>=1.4.0

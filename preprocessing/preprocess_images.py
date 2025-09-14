@@ -1,22 +1,3 @@
-#!/usr/bin/env python3
-"""
-preprocess_images_perfect.py — Polished preprocessing pipeline for Sortir Buah Jagung
-
-Focus: make preprocessing robust, fast, deterministic, and easy to tune.
-Key improvements over original:
-- Faster batch processing using ThreadPoolExecutor (configurable workers)
-- "fast" mode to skip expensive segmentation (GrabCut / Watershed / KMeans)
-- Centralized color-correction pipeline and safer IO (unicode-safe read/write)
-- Deterministic behavior via seed control (numpy + sklearn)
-- Cleaner CLI (+ --workers, --fast), better logging and concise summaries
-- Improved imwrite_unicode handling for alpha channels and extensions
-- Consolidated and simplified mask fusion logic for robust crop detection
-- Better metadata reporting and optional per-class tuning
-
-Author: Assistant (refined)
-Date: 2025-09
-"""
-
 from __future__ import annotations
 import os
 import sys
