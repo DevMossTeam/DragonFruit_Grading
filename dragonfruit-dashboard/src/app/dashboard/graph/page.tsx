@@ -396,7 +396,7 @@ export default function GraphPage() {
         {/* ML Fuzzy Gauge Charts */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Fuzzy Accuracy Gauge */}
-          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-md transition">
+          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105 border">
             <div className="h-56">
               <ReactApexChart
                 options={mlFuzzyChartOptions}
@@ -412,7 +412,7 @@ export default function GraphPage() {
           </div>
 
           {/* Precision Gauge */}
-          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-md transition">
+          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105">
             <div className="h-56">
               <ReactApexChart
                 options={mlPrecisionChartOptions}
@@ -428,7 +428,7 @@ export default function GraphPage() {
           </div>
 
           {/* Recall Gauge */}
-          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-md transition">
+          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105">
             <div className="h-56">
               <ReactApexChart
                 options={mlRecallChartOptions}
@@ -444,7 +444,7 @@ export default function GraphPage() {
           </div>
 
           {/* F1 Score Gauge */}
-          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-md transition">
+          <div className="bg-white rounded-lg shadow border border-slate-200 p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105">
             <div className="h-56">
               <ReactApexChart
                 options={mlF1ScoreChartOptions}
