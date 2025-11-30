@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchFromAPI } from "@/lib/api";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -26,27 +27,12 @@ export default function SettingsPage() {
     setMessage("");
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/auth/update-username`, {
+      const data = await fetchFromAPI<any>('/api/auth/update-username', {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
         credentials: "include",
         body: JSON.stringify({ newUsername: usernameForm.newUsername }),
       });
 
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const data = JSON.parse(text);
-          throw new Error(data.message || "Failed to update username");
-        } catch (e) {
-          throw new Error("Failed to update username. Server error.");
-        }
-      }
-
-      const data = await response.json();
       setMessage(data.message || "Username updated successfully!");
       setUsernameForm({ newUsername: "" });
       setTimeout(() => setMessage(""), 5000);
@@ -77,12 +63,8 @@ export default function SettingsPage() {
     }
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/auth/update-password`, {
+      const data = await fetchFromAPI<any>('/api/auth/update-password', {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
         credentials: "include",
         body: JSON.stringify({
           currentPassword: passwordForm.currentPassword,
@@ -90,17 +72,6 @@ export default function SettingsPage() {
         }),
       });
 
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const data = JSON.parse(text);
-          throw new Error(data.message || "Failed to update password");
-        } catch (e) {
-          throw new Error("Failed to update password. Server error.");
-        }
-      }
-
-      const data = await response.json();
       setMessage(data.message || "Password updated successfully!");
       setPasswordForm({
         currentPassword: "",

@@ -65,18 +65,13 @@ interface CachedMetrics {
  */
 export async function fetchClassificationMetrics(): Promise<ClassificationMetricsResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/metrics/classification`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const data: ClassificationMetricsResponse = await response.json();
+    const data: ClassificationMetricsResponse = await fetchFromAPI<ClassificationMetricsResponse>(
+      '/api/metrics/classification',
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
     
     // Cache the metrics
     if (data.status === "success" && data.metrics) {
@@ -99,18 +94,15 @@ export async function fetchClassificationMetrics(): Promise<ClassificationMetric
  */
 export async function fetchMetricsSummary() {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/metrics/summary`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const data = await fetchFromAPI<MetricsSummary>(
+      '/api/metrics/summary',
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return data;
   } catch (error) {
     console.error("Error fetching metrics summary:", error);
     return null;
@@ -122,18 +114,15 @@ export async function fetchMetricsSummary() {
  */
 export async function fetchConfusionMatrix(): Promise<ConfusionMatrixResponse | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/metrics/confusion-matrix`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const data = await fetchFromAPI<ConfusionMatrixResponse>(
+      '/api/metrics/confusion-matrix',
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    return await response.json();
+    return data;
   } catch (error) {
     console.error("Error fetching confusion matrix:", error);
     return null;

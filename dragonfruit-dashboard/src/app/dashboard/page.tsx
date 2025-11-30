@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { fetchFromAPI } from '@/lib/api';
 
 interface GradingResult {
   id: string;
@@ -44,14 +45,10 @@ export default function DashboardPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-        const response = await fetch(`${apiUrl}/api/gradingresult/all`);
-        
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const result: ApiResponse = await response.json();
+        const result: ApiResponse = await fetchFromAPI<ApiResponse>('/api/gradingresult/all', {
+          method: 'GET',
+          credentials: 'include',
+        });
         
         // Sort by newest first (descending order)
         const sortedData = result.data.sort((a, b) => {
