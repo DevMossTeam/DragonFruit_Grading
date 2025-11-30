@@ -13,17 +13,20 @@ export async function fetchFromAPI<T>(
       ...options?.headers as Record<string, string>,
     };
 
-    // Add session_id from localStorage as X-Session-ID header (primary auth method)
+    // Note: Don't manually add session_id for /me endpoint - let cookies handle it
+    // Only add X-Session-ID header for non-auth endpoints that need explicit session passing
+    const isAuthEndpoint = endpoint.includes('/auth/');
     const sessionId = typeof window !== 'undefined' ? localStorage.getItem('session_id') : null;
-    if (sessionId) {
+    
+    if (sessionId && !isAuthEndpoint) {
       headers['X-Session-ID'] = sessionId;
-      console.log('📍 Using session_id from localStorage as X-Session-ID header');
+      console.log('📍 Using session_id from localStorage as X-Session-ID header (non-auth endpoint)');
     }
 
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       // IMPORTANT: Always include credentials to send/receive cookies
-      credentials: options?.credentials || 'include',
+      credentials: options?.credentials !== undefined ? options.credentials : 'include',
       headers,
     });
 
@@ -40,7 +43,7 @@ export async function fetchFromAPI<T>(
     if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
       console.error('⚠️  CORS or network error. Check:');
       console.error('  - Backend running at:', API_BASE_URL);
-      console.error('  - Backend CORS allows:', window.location.origin);
+      console.error('  - Backend CORS allows:', typeof window !== 'undefined' ? window.location.origin : 'N/A');
       console.error('  - Check browser console Network tab for details');
     }
     throw err;

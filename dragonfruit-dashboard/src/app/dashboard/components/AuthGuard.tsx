@@ -7,22 +7,32 @@ import { getCurrentUser } from '@/lib/auth';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        console.log('🔍 Checking user authentication...');
         const user = await getCurrentUser();
         if (!user) {
           console.log('⚠️ No user found, redirecting to login');
+          setIsAuthenticated(false);
+          setIsLoading(false);
           router.push('/login');
         } else {
           console.log('✅ User authenticated:', user);
+          setIsAuthenticated(true);
           setIsLoading(false);
         }
       } catch (error) {
         console.error('❌ Auth check failed:', error);
-        router.push('/login');
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        // Only redirect after a short delay to ensure user sees loading state first
+        setTimeout(() => {
+          router.push('/login');
+        }, 500);
       }
     };
 
@@ -38,6 +48,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return null; // Will redirect to login
   }
 
   return <>{children}</>;

@@ -62,6 +62,17 @@ app.add_middleware(
 async def startup_event():
     print("🚀 Initializing MQTT client...")
     init_mqtt()
+    
+    # Initialize MQTT loadcell connection in background (non-blocking)
+    try:
+        import sys
+        import os
+        iot_path = os.path.join(os.path.dirname(__file__), '../iot')
+        sys.path.insert(0, iot_path)
+        import mqtt_receive_loadcell
+        mqtt_receive_loadcell.start_mqtt_connection()
+    except Exception as e:
+        print(f"⚠️ Warning: MQTT loadcell connection failed: {e}")
 
 
 # ==========================

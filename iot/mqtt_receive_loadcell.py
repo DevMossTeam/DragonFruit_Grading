@@ -31,13 +31,19 @@ def on_message(client, userdata, msg):
     except ValueError:
         print(f"✗ Error: Berat invalid '{bobot}'")
 
-# MAIN
+# Initialize client but DON'T connect yet (will be called from main.py)
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
 
-print("Menghubungkan ke MQTT...")
-client.connect(MQTT_BROKER, MQTT_PORT, 60)
+def start_mqtt_connection():
+    """Start MQTT connection - call this from app startup, not at import time"""
+    try:
+        print("Menghubungkan ke MQTT...")
+        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        client.loop_start()  # Start in background thread instead of blocking
+        print("✓ MQTT connection started")
+    except Exception as e:
+        print(f"✗ MQTT connection failed: {e}")
 
-# loop forever menunggu data
-client.loop_forever()
+# Don't connect on import - let the application call start_mqtt_connection() during startup

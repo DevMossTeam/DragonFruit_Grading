@@ -18,15 +18,13 @@ class UserResponse(BaseModel):
     email: str
 
 async def get_current_user(request: Request):
-    # Try cookie first, then header as fallback
-    session_id = request.cookies.get("session_id") or request.headers.get("X-Session-ID")
-    cookie_session = request.cookies.get("session_id")
-    header_session = request.headers.get("X-Session-ID")
+    # Only use cookie, don't try header
+    session_id = request.cookies.get("session_id")
     
-    logger.info(f"🔍 Checking auth - cookie: {cookie_session}, header: {header_session}")
+    logger.info(f"🔍 Checking auth - cookie: {session_id}")
     
     if not session_id:
-        logger.warning("❌ No session_id found (no cookie or X-Session-ID header)")
+        logger.warning("❌ No session_id cookie found")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     session = get_session(session_id)
@@ -68,8 +66,9 @@ async def login(response: Response, request: LoginRequest):
         value=session_id,
         httponly=True,
         secure=False,  # Set to True in production with HTTPS
-        samesite="none",  # Allow cross-origin requests in development
-        max_age=3600
+        samesite="lax",  # Changed from "none" to "lax" for development
+        max_age=3600,
+        path="/"  # Ensure cookie is sent to all paths
     )
     logger.info(f"🍪 Cookie set with session_id: {session_id}")
     
