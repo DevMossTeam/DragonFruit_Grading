@@ -5,26 +5,17 @@ import os
 TARGET_SIZE = 3060
 
 # =========================
-# Folder penyimpanan foto
+# Folder & Nama File Fix
 # =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_DIR = os.path.join(BASE_DIR, "..", "raw_data")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-def get_next_filename():
-    existing = [f for f in os.listdir(SAVE_DIR) if f.startswith("photo_3060x3060")]
-    numbers = []
-    for f in existing:
-        try:
-            numbers.append(int(f.replace("photo_3060x3060_", "").replace(".jpg", "")))
-        except:
-            pass
-    next_num = max(numbers) + 1 if numbers else 1
-    return os.path.join(SAVE_DIR, f"photo_3060x3060_{next_num}.jpg")
+SAVE_PATH = os.path.join(SAVE_DIR, "photo_latest.jpg")
 
 
 # =========================
-# Hilangkan bingkai hitam (simple & aman)
+# Hilangkan bingkai hitam
 # =========================
 def remove_black_border(frame, threshold=15):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -32,7 +23,7 @@ def remove_black_border(frame, threshold=15):
     coords = np.column_stack(np.where(mask))
 
     if coords.size == 0:
-        return frame  # fail-safe
+        return frame
 
     y_min, x_min = coords.min(axis=0)
     y_max, x_max = coords.max(axis=0)
@@ -40,7 +31,7 @@ def remove_black_border(frame, threshold=15):
     cropped = frame[y_min:y_max, x_min:x_max]
 
     if cropped.size == 0:
-        return frame  # fail-safe
+        return frame
 
     return cropped
 
@@ -58,14 +49,14 @@ for i in range(5):
         break
 
 if camera_index == -1:
-    print("Tidak ada kamera ditemukan!")
+    print("Tidak ada kamera!")
     exit()
 
 cap = cv2.VideoCapture(camera_index)
 
 
 # =========================
-# LOOP UTAMA
+# Loop Utama
 # =========================
 while True:
     ret, frame = cap.read()
@@ -73,35 +64,32 @@ while True:
         print("Frame tidak terbaca")
         break
 
-    # --- Hapus bingkai hitam ---
     frame_clean = remove_black_border(frame)
 
     h, w = frame_clean.shape[:2]
     if h == 0 or w == 0:
         continue
 
-    # --- Crop kotak 1:1 ---
     side = min(h, w)
     x1 = (w - side) // 2
     y1 = (h - side) // 2
-
     square = frame_clean[y1:y1+side, x1:x1+side]
 
     if square.size == 0:
         continue
 
-    # --- Resize ke 3060 x 3060 ---
     output = cv2.resize(square, (TARGET_SIZE, TARGET_SIZE))
 
     cv2.imshow("Camera 1:1 (3060x3060)", output)
 
     key = cv2.waitKey(1)
 
-    # --- Save ---
+    # =========================
+    # SAVE → always replace
+    # =========================
     if key == ord('s'):
-        filename = get_next_filename()
-        cv2.imwrite(filename, output)
-        print("✔ Saved:", filename)
+        cv2.imwrite(SAVE_PATH, output)
+        print("✔ Gambar disimpan & replace:", SAVE_PATH)
 
     if key == ord('q'):
         break
