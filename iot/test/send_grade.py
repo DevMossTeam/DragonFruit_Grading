@@ -1,19 +1,22 @@
 import paho.mqtt.client as mqtt
-import time
 
-broker = "10.120.200.89"
-topic = "iot/machine/grade"
+BROKER = "10.120.200.89"
+TOPIC  = "iot/machine/grade"
 
+# --- Setup MQTT Client ---
 client = mqtt.Client()
-client.connect(broker, 1883, 60)
+client.connect(BROKER, 1883, 60)
 
-while True:
-    grade = input("Masukkan Grade (A/B/C): ").upper()
+def send_grade(grade: str):
+    """
+    Mengirim grade (A/B/C) ke MQTT broker.
+    Dipanggil langsung dari camera.py
+    """
+    grade = grade.upper()
 
     if grade not in ["A", "B", "C"]:
-        print("Grade tidak valid!")
-        continue
+        print("[MQTT] Grade tidak valid, tidak terkirim:", grade)
+        return
 
-    client.publish(topic, grade)
-    print("Terkirim:", grade)
-    time.sleep(0.2)
+    client.publish(TOPIC, grade)
+    print(f"[MQTT] Grade terkirim: {grade}")
