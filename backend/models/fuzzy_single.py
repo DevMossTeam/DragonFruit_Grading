@@ -1,4 +1,4 @@
-model/fuzzy_single.py
+# model/fuzzy_single.py
 
 import cv2
 import numpy as np

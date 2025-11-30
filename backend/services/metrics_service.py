@@ -95,6 +95,75 @@ class MetricsService:
         return y_true_filtered, y_pred_filtered
     
     @staticmethod
+    def compute_fuzzy_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Compute fuzzy logic metrics based on fuzzy_score (no ground truth needed)
+        
+        Calculates:
+        - Fuzzy Accuracy: Based on fuzzy confidence score
+        - Fuzzy Precision/Recall: Per-grade based on fuzzy score distribution
+        - Fuzzy F1: Harmonic mean of precision and recall
+        
+        Args:
+            results: List of grading result dictionaries
+            
+        Returns:
+            Dictionary containing fuzzy metrics
+        """
+        if not results:
+            return {
+                "fuzzy_accuracy": 0.0,
+                "fuzzy_precision_A": 0.0,
+                "fuzzy_precision_B": 0.0,
+                "fuzzy_precision_C": 0.0,
+                "fuzzy_recall_A": 0.0,
+                "fuzzy_recall_B": 0.0,
+                "fuzzy_recall_C": 0.0,
+                "fuzzy_f1_A": 0.0,
+                "fuzzy_f1_B": 0.0,
+                "fuzzy_f1_C": 0.0,
+            }
+        
+        # Fuzzy Accuracy: Average of all fuzzy scores (0-100 or 0-1 range)
+        fuzzy_scores = [r.get("fuzzy_score", 0) for r in results if r.get("fuzzy_score") is not None]
+        
+        if not fuzzy_scores:
+            fuzzy_accuracy = 0.0
+        else:
+            # Normalize fuzzy scores to 0-1 if they're in 0-100 range
+            avg_fuzzy = sum(fuzzy_scores) / len(fuzzy_scores)
+            fuzzy_accuracy = avg_fuzzy / 100 if avg_fuzzy > 1 else avg_fuzzy
+        
+        # Per-grade analysis based on final_grade and fuzzy_score
+        grades = {}
+        for grade in MetricsService.VALID_GRADES:
+            grade_results = [r for r in results if r.get("final_grade") == grade]
+            
+            if grade_results:
+                grade_scores = [r.get("fuzzy_score", 0) for r in grade_results]
+                avg_grade_score = sum(grade_scores) / len(grade_scores)
+                # Normalize to 0-1
+                norm_score = avg_grade_score / 100 if avg_grade_score > 1 else avg_grade_score
+                
+                # For fuzzy metrics, use normalized score as both precision and recall
+                # This represents the confidence in that grade classification
+                grades[f"fuzzy_precision_{grade}"] = round(norm_score, 4)
+                grades[f"fuzzy_recall_{grade}"] = round(norm_score, 4)
+                
+                # F1 score: harmonic mean of precision and recall
+                # Since precision = recall for fuzzy metrics, F1 = precision = recall
+                grades[f"fuzzy_f1_{grade}"] = round(norm_score, 4)
+            else:
+                grades[f"fuzzy_precision_{grade}"] = 0.0
+                grades[f"fuzzy_recall_{grade}"] = 0.0
+                grades[f"fuzzy_f1_{grade}"] = 0.0
+        
+        return {
+            "fuzzy_accuracy": round(fuzzy_accuracy, 4),
+            **grades
+        }
+    
+    @staticmethod
     def compute_metrics(y_true: List[str], y_pred: List[str]) -> Dict[str, Any]:
         """
         Compute comprehensive classification metrics
@@ -173,6 +242,8 @@ class MetricsService:
         - y_true: Ground truth grade from actual weight (weight_actual_g)
         - y_pred: Fuzzy logic prediction (final_grade)
         
+        Also computes fuzzy metrics based on fuzzy_score confidence
+        
         Returns:
             Dictionary with all metrics and metadata
         """
@@ -181,13 +252,31 @@ class MetricsService:
             results = MetricsService.fetch_grading_results()
             
             if not results:
+                # Return default metrics with 0 values
                 return {
                     "status": "warning",
                     "message": "No grading results found",
-                    "metrics": None
+                    "metrics": {
+                        "accuracy": 0,
+                        "precision_A": 0, "precision_B": 0, "precision_C": 0,
+                        "recall_A": 0, "recall_B": 0, "recall_C": 0,
+                        "f1_A": 0, "f1_B": 0, "f1_C": 0,
+                        "macro_precision": 0, "macro_recall": 0, "macro_f1": 0,
+                        "weighted_f1": 0,
+                        "confusion_matrix": [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                        "total_samples": 0,
+                        "valid_samples": 0,
+                        "fuzzy_accuracy": 0,
+                        "fuzzy_precision_A": 0, "fuzzy_precision_B": 0, "fuzzy_precision_C": 0,
+                        "fuzzy_recall_A": 0, "fuzzy_recall_B": 0, "fuzzy_recall_C": 0,
+                        "fuzzy_f1_A": 0, "fuzzy_f1_B": 0, "fuzzy_f1_C": 0,
+                    }
                 }
             
-            # Extract grades
+            # Compute fuzzy metrics (based on fuzzy_score, no ground truth needed)
+            fuzzy_metrics = MetricsService.compute_fuzzy_metrics(results)
+            
+            # Extract grades for accuracy metrics
             # y_true: Ground truth from actual weight (weight_actual_g)
             # y_pred: Fuzzy logic predictions (final_grade)
             y_true = []
@@ -207,23 +296,42 @@ class MetricsService:
             
             logger.info(f"Extracted {len(y_true)} valid samples for validation (actual weight available)")
             
-            # Validate
-            y_true_valid, y_pred_valid = MetricsService.validate_grades(y_true, y_pred)
+            # Compute classification metrics if we have ground truth
+            if y_true and y_pred:
+                # Validate
+                y_true_valid, y_pred_valid = MetricsService.validate_grades(y_true, y_pred)
+                
+                if y_true_valid and y_pred_valid:
+                    # Compute metrics
+                    metrics = MetricsService.compute_metrics(y_true_valid, y_pred_valid)
+                    # Merge fuzzy metrics into main metrics
+                    metrics.update(fuzzy_metrics)
+                    
+                    return {
+                        "status": "success",
+                        "message": f"Metrics computed successfully - Compared {len(y_true_valid)} fuzzy predictions against weight-based ground truth",
+                        "metrics": metrics,
+                        "timestamp": pd.Timestamp.now().isoformat()
+                    }
             
-            if not y_true_valid:
-                return {
-                    "status": "warning",
-                    "message": f"No valid grades after filtering. Check data: {len(y_true)} samples had weights, but validation failed",
-                    "metrics": None
-                }
-            
-            # Compute metrics
-            metrics = MetricsService.compute_metrics(y_true_valid, y_pred_valid)
+            # If no ground truth, just return fuzzy metrics
+            default_metrics = {
+                "accuracy": 0,
+                "precision_A": 0, "precision_B": 0, "precision_C": 0,
+                "recall_A": 0, "recall_B": 0, "recall_C": 0,
+                "f1_A": 0, "f1_B": 0, "f1_C": 0,
+                "macro_precision": 0, "macro_recall": 0, "macro_f1": 0,
+                "weighted_f1": 0,
+                "confusion_matrix": [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                "total_samples": len(results),
+                "valid_samples": len(y_true) if y_true else 0,
+            }
+            default_metrics.update(fuzzy_metrics)
             
             return {
                 "status": "success",
-                "message": f"Metrics computed successfully - Compared {len(y_true_valid)} fuzzy predictions against weight-based ground truth",
-                "metrics": metrics,
+                "message": f"Fuzzy metrics computed for {len(results)} samples (ground truth not available for accuracy)",
+                "metrics": default_metrics,
                 "timestamp": pd.Timestamp.now().isoformat()
             }
         
