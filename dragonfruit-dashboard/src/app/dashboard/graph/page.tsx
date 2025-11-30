@@ -134,25 +134,28 @@ export default function GraphPage() {
               },
               precision: {
                 label: 'Precision',
-                value: metrics.fuzzy_precision_A && metrics.fuzzy_precision_B && metrics.fuzzy_precision_C 
-                  ? ((metrics.fuzzy_precision_A + metrics.fuzzy_precision_B + metrics.fuzzy_precision_C) / 3) * 100
-                  : 0,
+                value: (() => {
+                  const precisions = [metrics.fuzzy_precision_A, metrics.fuzzy_precision_B, metrics.fuzzy_precision_C].filter(v => v && v > 0);
+                  return precisions.length > 0 ? (precisions.reduce((a, b) => a + b, 0) / precisions.length) * 100 : 0;
+                })(),
                 unit: '%',
                 status: 'good',
               },
               recall: {
                 label: 'Recall',
-                value: metrics.fuzzy_recall_A && metrics.fuzzy_recall_B && metrics.fuzzy_recall_C
-                  ? ((metrics.fuzzy_recall_A + metrics.fuzzy_recall_B + metrics.fuzzy_recall_C) / 3) * 100
-                  : 0,
+                value: (() => {
+                  const recalls = [metrics.fuzzy_recall_A, metrics.fuzzy_recall_B, metrics.fuzzy_recall_C].filter(v => v && v > 0);
+                  return recalls.length > 0 ? (recalls.reduce((a, b) => a + b, 0) / recalls.length) * 100 : 0;
+                })(),
                 unit: '%',
                 status: 'good',
               },
               f1Score: {
                 label: 'F1 Score',
-                value: metrics.fuzzy_f1_A && metrics.fuzzy_f1_B && metrics.fuzzy_f1_C
-                  ? ((metrics.fuzzy_f1_A + metrics.fuzzy_f1_B + metrics.fuzzy_f1_C) / 3) * 100
-                  : 0,
+                value: (() => {
+                  const f1s = [metrics.fuzzy_f1_A, metrics.fuzzy_f1_B, metrics.fuzzy_f1_C].filter(v => v && v > 0);
+                  return f1s.length > 0 ? (f1s.reduce((a, b) => a + b, 0) / f1s.length) * 100 : 0;
+                })(),
                 unit: '%',
                 status: 'good',
               },
@@ -482,12 +485,28 @@ export default function GraphPage() {
             <div className="border-l-4 border-orange-500 pl-4 py-4 bg-orange-50 rounded-r hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-2">
                 <p className="text-sm font-semibold text-slate-700">Fuzzy Accuracy</p>
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Excellent
-                </span>
+                {sectionData.machineLearning.fuzzyAccuracy.value >= 90 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Excellent
+                  </span>
+                ) : sectionData.machineLearning.fuzzyAccuracy.value >= 80 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Good
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    Needs Work
+                  </span>
+                )}
               </div>
               <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.fuzzyAccuracy.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
@@ -500,12 +519,28 @@ export default function GraphPage() {
             <div className="border-l-4 border-emerald-500 pl-4 py-4 bg-emerald-50 rounded-r hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-2">
                 <p className="text-sm font-semibold text-slate-700">Precision</p>
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Excellent
-                </span>
+                {sectionData.machineLearning.precision.value >= 90 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Excellent
+                  </span>
+                ) : sectionData.machineLearning.precision.value >= 80 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Good
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    Needs Work
+                  </span>
+                )}
               </div>
               <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.precision.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
@@ -518,12 +553,28 @@ export default function GraphPage() {
             <div className="border-l-4 border-indigo-500 pl-4 py-4 bg-indigo-50 rounded-r hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-2">
                 <p className="text-sm font-semibold text-slate-700">Recall</p>
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Excellent
-                </span>
+                {sectionData.machineLearning.recall.value >= 90 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Excellent
+                  </span>
+                ) : sectionData.machineLearning.recall.value >= 80 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Good
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    Needs Work
+                  </span>
+                )}
               </div>
               <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.recall.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
@@ -536,12 +587,28 @@ export default function GraphPage() {
             <div className="border-l-4 border-pink-500 pl-4 py-4 bg-pink-50 rounded-r hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-2">
                 <p className="text-sm font-semibold text-slate-700">F1 Score</p>
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Excellent
-                </span>
+                {sectionData.machineLearning.f1Score.value >= 90 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Excellent
+                  </span>
+                ) : sectionData.machineLearning.f1Score.value >= 80 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Good
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 rounded text-xs font-bold">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    Needs Work
+                  </span>
+                )}
               </div>
               <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.f1Score.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">

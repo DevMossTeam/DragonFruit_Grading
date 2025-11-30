@@ -97,12 +97,13 @@ class MetricsService:
     @staticmethod
     def compute_fuzzy_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Compute fuzzy logic metrics based on fuzzy_score (no ground truth needed)
+        Compute fuzzy logic metrics by comparing predicted grade vs actual grade
         
         Calculates:
-        - Fuzzy Accuracy: Based on fuzzy confidence score
-        - Fuzzy Precision/Recall: Per-grade based on fuzzy score distribution
-        - Fuzzy F1: Harmonic mean of precision and recall
+        - Fuzzy Accuracy: Average confidence of all predictions
+        - Fuzzy Precision: Per-grade TP / (TP + FP)
+        - Fuzzy Recall: Per-grade TP / (TP + FN)
+        - Fuzzy F1: Harmonic mean of precision and recall per grade
         
         Args:
             results: List of grading result dictionaries
@@ -124,7 +125,7 @@ class MetricsService:
                 "fuzzy_f1_C": 0.0,
             }
         
-        # Fuzzy Accuracy: Average of all fuzzy scores (0-100 or 0-1 range)
+        # Fuzzy Accuracy: Average of all fuzzy scores (confidence metric)
         fuzzy_scores = [r.get("fuzzy_score", 0) for r in results if r.get("fuzzy_score") is not None]
         
         if not fuzzy_scores:
@@ -134,38 +135,59 @@ class MetricsService:
             avg_fuzzy = sum(fuzzy_scores) / len(fuzzy_scores)
             fuzzy_accuracy = avg_fuzzy / 100 if avg_fuzzy > 1 else avg_fuzzy
         
-        # Per-grade analysis based on final_grade and fuzzy_score
+        # Calculate ground truth grades from weight_actual_g
+        y_true = []
+        y_pred = []
+        
+        for r in results:
+            weight_actual = r.get("weight_actual_g")
+            predicted_grade = r.get("final_grade")
+            
+            if weight_actual is not None and predicted_grade:
+                # Calculate actual grade from weight (ground truth)
+                actual_grade = MetricsService.grade_by_actual_weight(weight_actual)
+                
+                if actual_grade:
+                    y_true.append(actual_grade)
+                    y_pred.append(predicted_grade)
+        
+        # Per-grade Precision, Recall, and F1 using confusion matrix approach
         grades = {}
-        total_results = len(results)
+        total_samples = len(y_true)
         
         for grade in MetricsService.VALID_GRADES:
-            grade_results = [r for r in results if r.get("final_grade") == grade]
+            # True Positives: Correctly predicted as this grade
+            tp = sum(1 for true, pred in zip(y_true, y_pred) if true == grade and pred == grade)
             
-            if grade_results:
-                grade_scores = [r.get("fuzzy_score", 0) for r in grade_results]
-                avg_grade_score = sum(grade_scores) / len(grade_scores)
-                # Normalize to 0-1
-                norm_score = avg_grade_score / 100 if avg_grade_score > 1 else avg_grade_score
-                
-                # Precision: Confidence in predicting this grade (from fuzzy_score)
-                precision = norm_score
-                
-                # Recall: How many samples of this grade were detected (count ratio)
-                recall = len(grade_results) / total_results if total_results > 0 else 0
-                
-                # F1: Harmonic mean of precision and recall
-                if precision > 0 and recall > 0:
-                    f1 = 2 * (precision * recall) / (precision + recall)
-                else:
-                    f1 = 0
-                
-                grades[f"fuzzy_precision_{grade}"] = round(precision, 4)
-                grades[f"fuzzy_recall_{grade}"] = round(recall, 4)
-                grades[f"fuzzy_f1_{grade}"] = round(f1, 4)
+            # False Positives: Incorrectly predicted as this grade
+            fp = sum(1 for true, pred in zip(y_true, y_pred) if true != grade and pred == grade)
+            
+            # False Negatives: Should have been this grade but wasn't
+            fn = sum(1 for true, pred in zip(y_true, y_pred) if true == grade and pred != grade)
+            
+            # Precision = TP / (TP + FP)
+            # How many predicted as this grade are actually correct?
+            if tp + fp > 0:
+                precision = tp / (tp + fp)
             else:
-                grades[f"fuzzy_precision_{grade}"] = 0.0
-                grades[f"fuzzy_recall_{grade}"] = 0.0
-                grades[f"fuzzy_f1_{grade}"] = 0.0
+                precision = 0.0
+            
+            # Recall = TP / (TP + FN)
+            # Of all actual samples of this grade, how many did we correctly identify?
+            if tp + fn > 0:
+                recall = tp / (tp + fn)
+            else:
+                recall = 0.0
+            
+            # F1 Score = 2 * (Precision * Recall) / (Precision + Recall)
+            if precision + recall > 0:
+                f1 = 2 * (precision * recall) / (precision + recall)
+            else:
+                f1 = 0.0
+            
+            grades[f"fuzzy_precision_{grade}"] = round(precision, 4)
+            grades[f"fuzzy_recall_{grade}"] = round(recall, 4)
+            grades[f"fuzzy_f1_{grade}"] = round(f1, 4)
         
         return {
             "fuzzy_accuracy": round(fuzzy_accuracy, 4),
