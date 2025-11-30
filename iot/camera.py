@@ -8,7 +8,7 @@ TARGET_SIZE = 3060
 # Folder & Nama File Fix
 # =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SAVE_DIR = os.path.join(BASE_DIR, "..", "raw_data")
+SAVE_DIR = os.path.join(BASE_DIR, "..", "data")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 SAVE_PATH = os.path.join(SAVE_DIR, "photo_latest.jpg")
@@ -89,7 +89,7 @@ while True:
     # =========================
     if key == ord('s'):
         cv2.imwrite(SAVE_PATH, output)
-        print("✔ Gambar disimpan & replace:", SAVE_PATH)
+        print("[INFO] Gambar disimpan & replace:", SAVE_PATH)
 
     if key == ord('q'):
         break

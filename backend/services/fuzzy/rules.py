@@ -60,7 +60,6 @@ def build_fuzzy_controller():
         ctrl.Rule(weight['low'], score['low']),
 
         # Supportive rules: large size & good ratio increase score even if weight mid
-        ctrl.Rule((length['large'] & ratio['good']) & weight['mid'], score['high']),
         ctrl.Rule((diameter['large'] & ratio['good']) & weight['mid'], score['high']),
 
         # If size small and ratio poor -> low score

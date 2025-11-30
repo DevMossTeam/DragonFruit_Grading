@@ -16,26 +16,15 @@ class UserResponse(BaseModel):
     email: str
 
 async def get_current_user(request: Request):
-    # Try to get session_id from cookies first (primary method)
     session_id = request.cookies.get("session_id")
-    
-    # Fallback: Try to get session_id from X-Session-ID header
-    if not session_id:
-        session_id = request.headers.get("X-Session-ID")
-        if session_id:
-            print(f"✅ Session from X-Session-ID header: {session_id}")
-    
     if not session_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=401, detail="Session expired")
-    
     user = get_user_by_uid(session["user_id"])
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    
     return user
 
 # Handle preflight requests
@@ -54,8 +43,8 @@ async def login(response: Response, request: LoginRequest):
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=False,  # False for localhost, True for production HTTPS
-        samesite="none",  # ✅ Changed from "lax" to "none" for cross-origin requests
+        secure=False,
+        samesite="lax",
         max_age=3600
     )
     return {
