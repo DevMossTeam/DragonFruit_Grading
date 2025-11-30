@@ -489,7 +489,7 @@ export default function GraphPage() {
                   Excellent
                 </span>
               </div>
-              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.fuzzyAccuracy.value}%</p>
+              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.fuzzyAccuracy.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
                 <div className="bg-emerald-500 h-2 rounded-full transition-all" style={{width: `${sectionData.machineLearning.fuzzyAccuracy.value}%`}}></div>
               </div>
@@ -507,7 +507,7 @@ export default function GraphPage() {
                   Excellent
                 </span>
               </div>
-              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.precision.value}%</p>
+              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.precision.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
                 <div className="bg-emerald-500 h-2 rounded-full transition-all" style={{width: `${sectionData.machineLearning.precision.value}%`}}></div>
               </div>
@@ -525,7 +525,7 @@ export default function GraphPage() {
                   Excellent
                 </span>
               </div>
-              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.recall.value}%</p>
+              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.recall.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
                 <div className="bg-emerald-500 h-2 rounded-full transition-all" style={{width: `${sectionData.machineLearning.recall.value}%`}}></div>
               </div>
@@ -543,7 +543,7 @@ export default function GraphPage() {
                   Excellent
                 </span>
               </div>
-              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.f1Score.value}%</p>
+              <p className="text-3xl font-bold text-slate-900 mb-2">{sectionData.machineLearning.f1Score.value.toFixed(1)}%</p>
               <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
                 <div className="bg-emerald-500 h-2 rounded-full transition-all" style={{width: `${sectionData.machineLearning.f1Score.value}%`}}></div>
               </div>
@@ -561,6 +561,89 @@ export default function GraphPage() {
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500 text-white font-bold text-lg">
                   ✓
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Metrics Explanation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+          {/* Fuzzy Accuracy Explanation */}
+          <div className="bg-linear-to-br from-orange-50 to-amber-50 rounded-lg border-2 border-orange-200 p-6 hover:shadow-lg transition-shadow">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0">
+                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-orange-500 text-white">
+                  <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.5a1 1 0 002 0V7z" clipRule="evenodd" /></svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-base font-bold text-orange-900 mb-2">What is Fuzzy Accuracy?</h4>
+                <p className="text-sm text-slate-700 mb-3">
+                  The average confidence level of the fuzzy logic system across <strong>all predictions</strong>, regardless of fruit grade. Ranges from 0-100%.
+                </p>
+                <div className="bg-white rounded p-3 border-l-4 border-orange-400">
+                  <p className="text-xs text-slate-600 font-mono">Formula: Average of all fuzzy_score values</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Precision Explanation */}
+          <div className="bg-linear-to-br from-teal-50 to-cyan-50 rounded-lg border-2 border-teal-200 p-6 hover:shadow-lg transition-shadow">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0">
+                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-teal-500 text-white">
+                  <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 10-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-base font-bold text-teal-900 mb-2">What is Precision?</h4>
+                <p className="text-sm text-slate-700 mb-3">
+                  The <strong>average confidence</strong> of predictions per grade. Measures how confident the fuzzy system is when making classifications based on fuzzy scores (0-100).
+                </p>
+                <div className="bg-white rounded p-3 border-l-4 border-teal-400">
+                  <p className="text-xs text-slate-600 font-mono">Formula: Average fuzzy_score per grade</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recall Explanation */}
+          <div className="bg-linear-to-br from-indigo-50 to-purple-50 rounded-lg border-2 border-indigo-200 p-6 hover:shadow-lg transition-shadow">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0">
+                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-indigo-500 text-white">
+                  <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" /></svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-base font-bold text-indigo-900 mb-2">What is Recall?</h4>
+                <p className="text-sm text-slate-700 mb-3">
+                  The <strong>coverage percentage</strong> of each grade category. Shows what proportion of the total samples belong to each fruit grade classification.
+                </p>
+                <div className="bg-white rounded p-3 border-l-4 border-indigo-400">
+                  <p className="text-xs text-slate-600 font-mono">Formula: (Count of grade) / (Total samples) × 100%</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* F1 Score Explanation */}
+          <div className="bg-linear-to-br from-pink-50 to-rose-50 rounded-lg border-2 border-pink-200 p-6 hover:shadow-lg transition-shadow">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0">
+                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-pink-500 text-white">
+                  <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-base font-bold text-pink-900 mb-2">What is F1 Score?</h4>
+                <p className="text-sm text-slate-700 mb-3">
+                  The <strong>harmonic mean</strong> of Precision and Recall, giving equal weight to both metrics. Provides a balanced measure of overall classification performance.
+                </p>
+                <div className="bg-white rounded p-3 border-l-4 border-pink-400">
+                  <p className="text-xs text-slate-600 font-mono">Formula: 2 × (Precision × Recall) / (Precision + Recall)</p>
                 </div>
               </div>
             </div>

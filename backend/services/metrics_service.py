@@ -136,6 +136,8 @@ class MetricsService:
         
         # Per-grade analysis based on final_grade and fuzzy_score
         grades = {}
+        total_results = len(results)
+        
         for grade in MetricsService.VALID_GRADES:
             grade_results = [r for r in results if r.get("final_grade") == grade]
             
@@ -145,14 +147,21 @@ class MetricsService:
                 # Normalize to 0-1
                 norm_score = avg_grade_score / 100 if avg_grade_score > 1 else avg_grade_score
                 
-                # For fuzzy metrics, use normalized score as both precision and recall
-                # This represents the confidence in that grade classification
-                grades[f"fuzzy_precision_{grade}"] = round(norm_score, 4)
-                grades[f"fuzzy_recall_{grade}"] = round(norm_score, 4)
+                # Precision: Confidence in predicting this grade (from fuzzy_score)
+                precision = norm_score
                 
-                # F1 score: harmonic mean of precision and recall
-                # Since precision = recall for fuzzy metrics, F1 = precision = recall
-                grades[f"fuzzy_f1_{grade}"] = round(norm_score, 4)
+                # Recall: How many samples of this grade were detected (count ratio)
+                recall = len(grade_results) / total_results if total_results > 0 else 0
+                
+                # F1: Harmonic mean of precision and recall
+                if precision > 0 and recall > 0:
+                    f1 = 2 * (precision * recall) / (precision + recall)
+                else:
+                    f1 = 0
+                
+                grades[f"fuzzy_precision_{grade}"] = round(precision, 4)
+                grades[f"fuzzy_recall_{grade}"] = round(recall, 4)
+                grades[f"fuzzy_f1_{grade}"] = round(f1, 4)
             else:
                 grades[f"fuzzy_precision_{grade}"] = 0.0
                 grades[f"fuzzy_recall_{grade}"] = 0.0
