@@ -18,6 +18,33 @@ class MetricsService:
     VALID_GRADES = ["A", "B", "C"]
     API_ENDPOINT = "http://127.0.0.1:8000/api/gradingresult/all"
     
+    # Weight-based grading thresholds (in grams)
+    WEIGHT_GRADE_THRESHOLDS = {
+        "A": (600, float('inf')),      # >= 600g = Grade A (Premium)
+        "B": (300, 600),                # 300-599g = Grade B (Regular)
+        "C": (0, 300),                  # < 300g = Grade C (Small/Standard)
+    }
+    
+    @staticmethod
+    def grade_by_actual_weight(weight_g: float) -> str:
+        """
+        Classify dragon fruit grade based on actual weight (ground truth)
+        
+        Args:
+            weight_g: Actual weight in grams
+            
+        Returns:
+            Grade: 'A', 'B', or 'C'
+        """
+        if weight_g is None or weight_g < 0:
+            return None
+        
+        for grade, (min_weight, max_weight) in MetricsService.WEIGHT_GRADE_THRESHOLDS.items():
+            if min_weight <= weight_g < max_weight:
+                return grade
+        
+        return None
+    
     @staticmethod
     def fetch_grading_results() -> List[Dict[str, Any]]:
         """
@@ -142,6 +169,10 @@ class MetricsService:
         """
         Main method: Fetch data, validate, and compute metrics
         
+        Compares:
+        - y_true: Ground truth grade from actual weight (weight_actual_g)
+        - y_pred: Fuzzy logic prediction (final_grade)
+        
         Returns:
             Dictionary with all metrics and metadata
         """
@@ -156,12 +187,25 @@ class MetricsService:
                     "metrics": None
                 }
             
-            # Extract grades - using final_grade only now (no grade_by_weight)
-            y_true = [r.get("final_grade") for r in results]
-            y_pred = [r.get("final_grade") for r in results]
+            # Extract grades
+            # y_true: Ground truth from actual weight (weight_actual_g)
+            # y_pred: Fuzzy logic predictions (final_grade)
+            y_true = []
+            y_pred = []
             
-            # Note: y_true and y_pred are the same since we're comparing final_grade with itself
-            # This is a placeholder for future validation logic if needed
+            for r in results:
+                actual_weight = r.get("weight_actual_g")
+                predicted_grade = r.get("final_grade")
+                
+                # Calculate true grade from actual weight
+                true_grade = MetricsService.grade_by_actual_weight(actual_weight)
+                
+                # Only include if we have both actual weight and prediction
+                if true_grade is not None and predicted_grade is not None:
+                    y_true.append(true_grade)
+                    y_pred.append(predicted_grade)
+            
+            logger.info(f"Extracted {len(y_true)} valid samples for validation (actual weight available)")
             
             # Validate
             y_true_valid, y_pred_valid = MetricsService.validate_grades(y_true, y_pred)
@@ -169,7 +213,7 @@ class MetricsService:
             if not y_true_valid:
                 return {
                     "status": "warning",
-                    "message": "No valid grades after filtering",
+                    "message": f"No valid grades after filtering. Check data: {len(y_true)} samples had weights, but validation failed",
                     "metrics": None
                 }
             
@@ -178,7 +222,7 @@ class MetricsService:
             
             return {
                 "status": "success",
-                "message": f"Metrics computed successfully for {len(y_true_valid)} samples",
+                "message": f"Metrics computed successfully - Compared {len(y_true_valid)} fuzzy predictions against weight-based ground truth",
                 "metrics": metrics,
                 "timestamp": pd.Timestamp.now().isoformat()
             }
