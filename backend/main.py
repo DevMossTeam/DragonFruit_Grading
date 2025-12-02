@@ -28,6 +28,7 @@ from routes.metrics_routes import router as metrics_router
 from routes.user import router as user_router
 from controllers.GradingresultController import router as gradingresult_router
 from controllers.InsertdataController import router as insertdata_router
+from routes.vision_features_routes import router as vision_features_router
 
 # Request models
 class GradeRequest(BaseModel):
@@ -179,6 +180,7 @@ def grade_from_weight(weight_g: float) -> str:
 # ==========================
 app.include_router(gradingresult_router, prefix="/api/gradingresult", tags=["Grading Results"])
 app.include_router(metrics_router, prefix="/api", tags=["Metrics"])
+app.include_router(vision_features_router, tags=["Vision Features"])
 app.include_router(grading_router, prefix="/grading", tags=["Grading"])
 app.include_router(camera_router, prefix="/camera", tags=["Camera"])
 app.include_router(device_router, prefix="/device", tags=["Device / IoT"])

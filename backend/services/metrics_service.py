@@ -20,9 +20,9 @@ class MetricsService:
     
     # Weight-based grading thresholds (in grams)
     WEIGHT_GRADE_THRESHOLDS = {
-        "A": (600, float('inf')),      # >= 600g = Grade A (Premium)
-        "B": (300, 600),                # 300-599g = Grade B (Regular)
-        "C": (0, 300),                  # < 300g = Grade C (Small/Standard)
+        "A": (350, float('inf')),      # >= 600g = Grade A (Premium)
+        "B": (250, 350),                # 300-599g = Grade B (Regular)
+        "C": (0, 250),                  # < 300g = Grade C (Small/Standard)
     }
     
     @staticmethod

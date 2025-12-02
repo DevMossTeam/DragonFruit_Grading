@@ -36,7 +36,8 @@ class GradingResultCreate(BaseModel):
 # ----------------------------
 class GradingResultResponse(GradingResultCreate):
     id: UUID = Field(...)
-    created_at: Optional[datetime] = None
+    tanggal: Optional[datetime] = None  # ✅ Timestamp from database
+    created_at: Optional[datetime] = None  # Alias for tanggal
     updated_at: Optional[datetime] = None
 
     class Config:

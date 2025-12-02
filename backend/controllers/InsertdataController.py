@@ -175,7 +175,8 @@ def save_grading_result(
             ratio=grading_data.ratio,
             weight_actual_g=grading_data.weight_actual_g,
             fuzzy_score=grading_data.fuzzy_score,
-            final_grade=grading_data.final_grade
+            final_grade=grading_data.final_grade,
+            tanggal=datetime.now()  # ✅ Explicitly set timestamp
         )
         
         # Add to session & commit
