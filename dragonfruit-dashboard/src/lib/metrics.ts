@@ -22,6 +22,17 @@ export interface MetricsData {
   confusion_matrix: number[][];
   total_samples: number;
   valid_samples: number;
+  // Fuzzy logic metrics
+  fuzzy_accuracy: number;
+  fuzzy_precision_A: number;
+  fuzzy_precision_B: number;
+  fuzzy_precision_C: number;
+  fuzzy_recall_A: number;
+  fuzzy_recall_B: number;
+  fuzzy_recall_C: number;
+  fuzzy_f1_A: number;
+  fuzzy_f1_B: number;
+  fuzzy_f1_C: number;
 }
 
 export interface ClassificationMetricsResponse {

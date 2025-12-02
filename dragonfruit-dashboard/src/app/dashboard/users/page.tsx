@@ -154,7 +154,7 @@ export default function UsersPage() {
       <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">User Directory</h2>
+            <h2 className="text-xl font-bold text-slate-900">Table User</h2>
             <p className="text-xs text-slate-500 mt-0.5">Total users: <span className="font-semibold text-slate-700">({totalPages * pageSize})</span></p>
           </div>
           <a

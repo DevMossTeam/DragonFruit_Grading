@@ -11,10 +11,23 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
+import sys
+import os
 
 from core.database import get_db
 from models.grading_model import GradingResult
 from models.schemas import GradingResultCreate, GradingResultResponse
+
+# ✅ Import mqtt_receive_loadcell to access latest_weight_g
+try:
+    iot_path = os.path.join(os.path.dirname(__file__), '../../iot')
+    sys.path.insert(0, iot_path)
+    import mqtt_receive_loadcell
+    HAS_MQTT = True
+except ImportError:
+    mqtt_receive_loadcell = None
+    HAS_MQTT = False
+    print("[WARNING] mqtt_receive_loadcell not found - weight_actual_g will only be used if provided in request")
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -47,7 +60,8 @@ class GradingDataBuffer:
         length: float,
         diameter: float,
         weight: float,
-        ratio: float
+        ratio: float,
+        weight_actual_g: Optional[float] = None
     ) -> bool:
         """
         Set hasil grading ke buffer
@@ -59,6 +73,7 @@ class GradingDataBuffer:
             diameter: Diameter buah (cm)
             weight: Berat estimasi (g)
             ratio: Ratio L/D
+            weight_actual_g: Berat aktual dari load cell (g) - optional
         
         Returns:
             True jika valid, False jika ada error
@@ -83,6 +98,16 @@ class GradingDataBuffer:
             if ratio <= 0:
                 raise ValueError(f"Ratio harus > 0, dapat: {ratio}")
             
+            # Validate weight_actual_g if provided
+            if weight_actual_g is not None and weight_actual_g < 0:
+                raise ValueError(f"Weight actual harus >= 0, dapat: {weight_actual_g}")
+            
+            # ✅ NEW: Check if weight_actual_g not provided, get from MQTT
+            if weight_actual_g is None and HAS_MQTT and mqtt_receive_loadcell is not None:
+                weight_actual_g = mqtt_receive_loadcell.latest_weight_g
+                if weight_actual_g is not None:
+                    logger.info(f"✓ Using weight_actual_g dari MQTT: {weight_actual_g} g")
+            
             # Store data
             self.data = {
                 'grade': grade,
@@ -91,6 +116,7 @@ class GradingDataBuffer:
                 'diameter_cm': float(diameter),
                 'weight_est_g': float(weight),
                 'ratio': float(ratio),
+                'weight_actual_g': float(weight_actual_g) if weight_actual_g is not None else None,
                 'source': 'camera_iot'
             }
             
@@ -149,7 +175,8 @@ def save_grading_result(
             ratio=grading_data.ratio,
             weight_actual_g=grading_data.weight_actual_g,
             fuzzy_score=grading_data.fuzzy_score,
-            final_grade=grading_data.final_grade
+            final_grade=grading_data.final_grade,
+            tanggal=datetime.now()  # ✅ Explicitly set timestamp
         )
         
         # Add to session & commit
@@ -235,7 +262,8 @@ async def set_grading_buffer(
     length: float,
     diameter: float,
     weight: float,
-    ratio: float
+    ratio: float,
+    weight_actual_g: Optional[float] = None
 ) -> Dict[str, Any]:
     """
     Set hasil grading ke buffer (step 1 sebelum insert)
@@ -247,6 +275,7 @@ async def set_grading_buffer(
     - diameter: cm
     - weight: gram
     - ratio: L/D
+    - weight_actual_g: Berat aktual dari load cell (g) - optional
     
     Response:
     {
@@ -263,7 +292,8 @@ async def set_grading_buffer(
             length=length,
             diameter=diameter,
             weight=weight,
-            ratio=ratio
+            ratio=ratio,
+            weight_actual_g=weight_actual_g
         )
         
         if not success:
@@ -315,6 +345,7 @@ async def insert_from_buffer(db: Session = Depends(get_db)) -> GradingResultResp
             diameter_cm=data_dict.get('diameter_cm'),
             weight_est_g=data_dict.get('weight_est_g'),
             ratio=data_dict.get('ratio'),
+            weight_actual_g=data_dict.get('weight_actual_g'),
             fuzzy_score=data_dict.get('score'),
             final_grade=data_dict.get('grade')
         )

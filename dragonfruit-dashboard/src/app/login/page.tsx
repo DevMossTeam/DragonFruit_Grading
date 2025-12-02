@@ -31,7 +31,7 @@ export default function Login() {
         '/api/auth/login',
         {
           method: 'POST',
-          credentials: 'include',
+          credentials: 'include',  // Important: include cookies
           body: JSON.stringify({
             username_or_email: formData.email,
             password: formData.password
@@ -39,12 +39,15 @@ export default function Login() {
         }
       );
 
+      console.log('✅ Login response:', data);
+      
       // Store session_id in localStorage as backup
       if (data.session_id) {
         localStorage.setItem('session_id', data.session_id);
-        console.log('✅ Session ID stored in localStorage');
+        console.log('✅ Session ID stored in localStorage:', data.session_id);
       }
 
+      // The browser will automatically store the session_id cookie
       // Success: redirect to dashboard
       router.push('/dashboard');
     } catch (err: any) {
