@@ -42,8 +42,3 @@ function setGauge(value) {
     fill.style.strokeDashoffset = offset;
     val.textContent = value;
 }
-
-// Tombol test
-document.getElementById("testA").addEventListener("click", () => {
-    updateGauge("A");
-});
