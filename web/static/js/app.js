@@ -113,3 +113,33 @@ function addToTable(data) {
 
     table.prepend(row);
 }
+
+// ===============================
+// MQTT SEND CAPTURE TRIGGER
+// ===============================
+
+// Inisialisasi MQTT WebSocket client
+const mqttClient = mqtt.connect("ws://10.204.14.89:8083/mqtt"); 
+// Pastikan broker ESP32 atau Mosquitto aktif WS port 8083
+
+mqttClient.on("connect", () => {
+    console.log("✓ MQTT Web Connected");
+});
+
+// Event tombol capture
+document.getElementById("captureBtn").addEventListener("click", () => {
+    console.log("Mengirim trigger capture...");
+
+    mqttClient.publish("iot/camera/capture", "capture");
+
+    // Optional feedback UI
+    const btn = document.getElementById("captureBtn");
+    btn.textContent = "Processing...";
+    btn.disabled = true;
+
+    setTimeout(() => {
+        btn.textContent = "Capture";
+        btn.disabled = false;
+    }, 2000);
+});
+
