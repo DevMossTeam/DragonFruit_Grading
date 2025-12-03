@@ -4,64 +4,65 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DragonEye Dashboard</title>
-    <link rel="stylesheet" href="static/css/style.css">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="static/css/dashboard.css">
 </head>
 <body>
 
-<nav class="navbar">
-    <h2>DragonEye Dashboard</h2>
-    <button id="logoutBtn" class="btn-logout">Logout</button>
-</nav>
+    <!-- MAIN 50/50 LAYOUT -->
+    <div class="center-wrapper">
 
-<div class="container">
+        <!-- LEFT: CAMERA SECTION -->
+        <div class="camera-section">
+            <h3>Capture Image</h3>
 
-    <!-- Capture Card -->
-    <div class="card">
-        <h3>Capture Image</h3>
-        <video id="camera" autoplay></video>
-        <button class="btn-primary" id="captureBtn">Capture</button>
+            <video id="camera" autoplay></video>
+
+            <button id="captureBtn" class="btn-primary">Capture</button>
+        </div>
+
+        <!-- RIGHT: GRADE SECTION -->
+        <div class="grade-section">
+            <h3>Current Grade</h3>
+
+            <div class="gauge">
+                <svg class="gauge-svg" width="200" height="200">
+                    <circle class="gauge-bg" cx="100" cy="100" r="80"></circle>
+                    <circle class="gauge-progress" cx="100" cy="100" r="80"></circle>
+                </svg>
+
+                <div class="gauge-grade" id="gauge-grade">-</div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- Recent Result Card -->
-    <div class="card">
-        <h3>Recent Results</h3>
+    <!-- PREDICTION LOG -->
+    <div class="log-container">
+        <h3>Prediction Log</h3>
 
-        <div class="results-container">
-            <div class="result-row"><span>Grade:</span> <span id="res-grade">-</span></div>
-            <div class="result-row"><span>Score:</span> <span id="res-score">-</span></div>
-            <div class="result-row"><span>Length (cm):</span> <span id="res-length">-</span></div>
-            <div class="result-row"><span>Diameter (cm):</span> <span id="res-diameter">-</span></div>
-            <div class="result-row"><span>Est. Weight (g):</span> <span id="res-est-weight">-</span></div>
-            <div class="result-row"><span>Actual Weight (g):</span> <span id="res-actual-weight">-</span></div>
-            <div class="result-row"><span>Ratio L/D:</span> <span id="res-ratio">-</span></div>
-
-            <div class="grade-badge" id="grade-badge">-</div>
+        <div class="table-wrapper">
+            <table id="log-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Grade</th>
+                        <th>Length</th>
+                        <th>Diameter</th>
+                        <th>Est.Weight</th>
+                        <th>Actual</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
         </div>
     </div>
 
-</div>
+    <!-- JS -->
+    <script src="static/js/firebase-config.js"></script>
+    <script src="static/js/camera.js"></script>
+    <script src="static/js/app.js"></script>
 
-<!-- Log Table -->
-<div class="log-container">
-    <h3>Prediction Log</h3>
-    <table id="log-table">
-        <thead>
-            <tr>
-                <th>Time</th>
-                <th>Grade</th>
-                <th>Score</th>
-                <th>Length</th>
-                <th>Diameter</th>
-                <th>Est.Weight</th>
-                <th>Actual</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-</div>
-
-<script src="static/js/firebase-config.js"></script>
-<script src="static/js/camera.js"></script>
-<script src="static/js/app.js"></script>
 </body>
 </html>

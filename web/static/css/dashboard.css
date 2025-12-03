@@ -1,0 +1,221 @@
+/* ============================================================
+   GLOBAL RESET
+   ============================================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background: #ffffff; /* SUPER TERANG */
+    color: #111;
+    overflow-x: hidden;
+}
+
+/* Smooth scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* ============================================================
+   GLOBAL TEXT STYLES
+   ============================================================ */
+h3 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    color: #000;
+}
+
+/* ============================================================
+   MAIN WRAPPER (50% / 50% LAYOUT)
+   ============================================================ */
+.center-wrapper {
+    width: 100%;
+    max-width: 1500px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 30px 20px;
+    gap: 30px;
+}
+
+/* ============================================================
+   LEFT SIDE: CAMERA PANEL
+   ============================================================ */
+.camera-section {
+    flex: 1;
+    background: #fafafa; /* very light */
+    border: 2px solid #e3e3e3;
+    padding: 25px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* PERFECT 1:1 CAMERA RATIO */
+#camera {
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 1 / 1;     /* 1:1 FORCE */
+    background: #ddd;        /* grey placeholder */
+    border-radius: 10px;
+    border: 2px solid #ccc;
+    object-fit: cover;       /* KEEP REAL CAMERA LOOK */
+}
+
+/* CAMERA BUTTON */
+.btn-primary {
+    width: 180px;
+    padding: 12px 0;
+    margin-top: 18px;
+    font-size: 16px;
+    font-weight: 600;
+    background: #008CFF;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.btn-primary:hover {
+    background: #006edc;
+}
+
+/* ============================================================
+   RIGHT SIDE: GRADE PANEL
+   ============================================================ */
+.grade-section {
+    flex: 1;
+    background: #fafafa;
+    border: 2px solid #e3e3e3;
+    padding: 25px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+/* GAUGE WRAPPER */
+.gauge {
+    position: relative;
+    width: 240px;
+    height: 240px;
+    margin: 0 auto;
+}
+
+/* GAUGE CIRCLES */
+.gauge-svg {
+    transform: rotate(-90deg);
+}
+
+.gauge-bg {
+    fill: none;
+    stroke: #f0f0f0;
+    stroke-width: 18;
+}
+
+.gauge-progress {
+    fill: none;
+    stroke: #00bf2a;
+    stroke-width: 18;
+    stroke-linecap: round;
+    stroke-dasharray: 502;
+    stroke-dashoffset: 502;
+    transition: stroke-dashoffset 0.6s ease;
+}
+
+/* GAUGE VALUE TEXT */
+#gauge-grade {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 48px;
+    font-weight: 800;
+    color: #111;
+}
+
+/* ============================================================
+   PREDICTION LOG SECTION (BOTTOM)
+   ============================================================ */
+.log-container {
+    width: 100%;
+    margin-top: 40px;
+    padding: 20px;
+    background: #ffffff;
+}
+
+.log-container h3 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    font-weight: 700;
+}
+
+/* TABLE WRAPPER (scroll) */
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    border: 2px solid #e3e3e3;
+    border-radius: 10px;
+    background: #fafafa;
+}
+
+/* TABLE STYLING */
+#log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+}
+
+#log-table thead {
+    background: #f4f4f4;
+}
+
+#log-table th, #log-table td {
+    padding: 14px 12px;
+    border-bottom: 1px solid #e6e6e6;
+    text-align: left;
+    white-space: nowrap;
+}
+
+#log-table tbody tr:nth-child(even) {
+    background: #fdfdfd;
+}
+
+#log-table tbody tr:hover {
+    background: #f0f8ff;
+}
+
+/* ============================================================
+   RESPONSIVE DESIGN
+   ============================================================ */
+@media (max-width: 1200px) {
+    .center-wrapper {
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .camera-section, .grade-section {
+        width: 100%;
+    }
+}
+
+@media (max-width: 600px) {
+    h3 {
+        font-size: 18px;
+    }
+
+    #gauge-grade {
+        font-size: 38px;
+    }
+
+    .btn-primary {
+        width: 150px;
+    }
+}
