@@ -1,0 +1,109 @@
+Fuzzy Mamdani
+
+Citra Buah Naga
+   ↓
+Preprocessing → Segmentasi
+   ↓
+Ekstraksi Fitur:
+   - Warna (Hue rata-rata)
+   - Tekstur (GLCM contrast)
+   - Ukuran (Area)
+   ↓
+Normalisasi Nilai Fitur
+   ↓
+Fuzzifikasi:
+   Warna = {Pucat, Merah, Merah_Tua}
+   Tekstur = {Kasar, Sedikit_Cacat, Halus}
+   Ukuran = {Kecil, Sedang, Besar}
+   ↓
+Inference (Aturan Mamdani):
+   IF Warna=Merah_Tua AND Tekstur=Halus AND Ukuran=Besar THEN Grade=A
+   IF Warna=Merah AND Tekstur=Sedikit_Cacat THEN Grade=B
+   IF Warna=Pucat OR Tekstur=Kasar THEN Grade=C
+   ↓
+Defuzzifikasi (Metode Centroid)
+   ↓
+Output:
+   “Grade B – Buah Sedang, Warna Merah, Tekstur Sedikit Cacat”
+
+
+Fuzzy Mamdani (U)
+
+Citra Buah Naga
+   ↓
+Preprocessing → Segmentasi
+   ↓
+Ekstraksi Fitur:
+   ↓
+Normalisasi Nilai Fitur
+   ↓
+Fuzzifikasi:
+   Ukuran = {Kecil, Sedang, Besar}
+   ↓
+Inference (Aturan Mamdani):
+   ↓
+Defuzzifikasi (Metode Centroid)
+   ↓
+Output:
+   “Grade B – Buah Sedang”
+
+
+backend
+
+backend/
+│
+├── main.py                 ← entry point FastAPI
+│
+├── core/
+│   ├── config.py           ← env, settings
+│   ├── database.py         ← koneksi PostgreSQL
+│   ├── mqtt_client.py      ← client MQTT (jika dipakai)
+│   └── serial_conn.py      ← koneksi Serial (opsional)
+│
+├── models/
+│   ├── grading_model.py    ← model SQLAlchemy
+│   └── schemas.py          ← Pydantic schemas
+│
+├── routes/
+│   ├── grading_routes.py   ← endpoint grading
+│   ├── device_routes.py    ← endpoint kirim perintah ke IoT
+│   └── camera_routes.py    ← endpoint upload/pengambilan citra
+│
+├── controllers/            ← (opsional) handler pemisah logic & routing
+│   └── grading_controller.py
+│
+├── services/
+│   ├── fuzzy/
+│   │    ├── membership.py
+│   │    ├── rules.py
+│   │    └── mamdani.py
+│   │
+│   ├── pcv/
+│   │    ├── preprocess.py
+|   |    ├── pipeline.py
+│   │    ├── segmentation.py
+│   │    ├── feature_extract.py
+│   │    └── normalization.py
+│   │
+│   ├── mqtt_service.py     ← publish/subscribe
+│   ├── serial_service.py   ← kirim ke Arduino
+│   └── grading_service.py  ← menggabungkan fuzzy + PCV + berat
+│
+└── utils/
+    ├── file_manager.py
+    └── image_utils.py
+
+
+parameter 
+
+- length
+- diameter
+- weight
+- ratio
+
+
+mosquitto -c C:\Users\ASUS\mosquitto.conf -v
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+net stop mosquitto
+net start mosquitto
+
